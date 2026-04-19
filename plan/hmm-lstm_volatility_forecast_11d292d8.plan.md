@@ -10,7 +10,7 @@ todos:
     status: completed
   - id: phase3-lstm
     content: "Phase 3: LSTM training -- baseline LSTM on full data (3a DONE: PyTorch CPU + Optuna TPE, log-target, inverse-log MSE), then regime-specific LSTMs (calm + volatile) on HMM-split data"
-    status: in_progress
+    status: completed
   - id: phase4-ensemble
     content: "Phase 4: Ensemble prediction -- combine regime LSTMs weighted by HMM soft probabilities"
     status: pending
@@ -113,21 +113,19 @@ This is the key model-selection phase with three diagnostic questions to answer:
 - **Final pass**: retrain with Optuna's best params on the full training set, early-stopping on val, then evaluate on test
 - **Artifacts**: `models/lstm_baseline.pt` (state_dict + hyperparameters + feature list), `models/lstm_baseline_scaler.joblib`
 - **Entry points**: `src/train_LSTM_baseline.py` (CLI: `--features`, `--n-trials`, `--tune-epochs`, `--final-epochs`, ...) and the runner notebook `notebooks/04_lstm_baseline.ipynb`
+- **Results** (20 trials): best params `hidden_size=128, n_layers=1, dropout=0.155, lr=4.5e-4, seq_len=21`; test MSE=7.6e-4, RMSE=0.0276, MAE=0.0244 (1,538 windows)
 
-### 3b. Regime-Specific LSTMs
+### 3b. Regime-Specific LSTMs — DONE
 
-- Split training data by Viterbi-decoded regime labels
-- Train `LSTM_calm` on calm-regime windows only
-- Train `LSTM_volatile` on volatile-regime windows only
-- Same architecture as baseline, but each sees only its regime's data
-- Handle regime transitions at window boundaries (a window spanning both regimes gets assigned to the dominant regime)
+- **Implementation**: `src/train_LSTM_regime.py` (new); runner notebook `notebooks/05_lstm_regime.ipynb` (new)
+- **Window assignment**: `RegimeWindowDataset` filters sliding windows by dominant Viterbi state (majority vote across `seq_len` timesteps); windows spanning both regimes go to the majority regime
+- **Val fallback**: if a regime has fewer than 20 val-filtered windows (volatile during 2016-2019 calm period), the full unfiltered val loader is used for early-stopping instead
+- **Scaler**: always fit on the full training split (not regime-filtered) to keep input scale consistent across all three models
+- **Calm LSTM** — 2,819 training windows; best params tuned on regime-filtered val; artifacts `models/lstm_calm.pt` + `models/lstm_calm_scaler.joblib`
+- **Volatile LSTM** — 181 training windows (GFC/COVID/rate-hike periods); val fallback used (0 volatile val windows in 2016-2019); best params `hidden_size=32, n_layers=3, dropout=0.42, lr=9.1e-3, seq_len=42`; test MSE=4.9e-5, RMSE=0.0070, MAE=0.0055; artifacts `models/lstm_volatile.pt` + `models/lstm_volatile_scaler.joblib`
+- **Test evaluation**: both regime LSTMs are evaluated on the **full** test set (not filtered) so the ensemble can call them on every window
 
-**Hyperparameter tuning** (on validation set):
-
-- Hidden size, number of layers, dropout rate, learning rate, batch size, sequence length
-- Use **Optuna** TPE sampler (matching the baseline, for consistency); search space defined in `config.LSTM_SEARCH_SPACE`
-
-**Deliverable:** Three trained LSTM models (baseline, calm, volatile) saved as checkpoints.
+**Deliverable:** Three trained LSTM models (baseline, calm, volatile) saved as checkpoints. ✅ Complete on branch `phase3-lstm`.
 
 ---
 
