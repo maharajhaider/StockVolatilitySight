@@ -117,13 +117,12 @@ This is the key model-selection phase with three diagnostic questions to answer:
 
 ### 3b. Regime-Specific LSTMs — DONE
 
-- **Implementation**: `src/train_LSTM_regime.py` (new); runner notebook `notebooks/05_lstm_regime.ipynb` (new)
-- **Window assignment**: `RegimeWindowDataset` filters sliding windows by dominant Viterbi state (majority vote across `seq_len` timesteps); windows spanning both regimes go to the majority regime
-- **Val fallback**: if a regime has fewer than 20 val-filtered windows (volatile during 2016-2019 calm period), the full unfiltered val loader is used for early-stopping instead
-- **Scaler**: always fit on the full training split (not regime-filtered) to keep input scale consistent across all three models
-- **Calm LSTM** — 2,819 training windows; best params tuned on regime-filtered val; artifacts `models/lstm_calm.pt` + `models/lstm_calm_scaler.joblib`
-- **Volatile LSTM** — 181 training windows (GFC/COVID/rate-hike periods); val fallback used (0 volatile val windows in 2016-2019); best params `hidden_size=32, n_layers=3, dropout=0.42, lr=9.1e-3, seq_len=42`; test MSE=4.9e-5, RMSE=0.0070, MAE=0.0055; artifacts `models/lstm_volatile.pt` + `models/lstm_volatile_scaler.joblib`
-- **Test evaluation**: both regime LSTMs are evaluated on the **full** test set (not filtered) so the ensemble can call them on every window
+- Split training data by Viterbi-decoded regime labels
+- Train `LSTM_calm` on calm-regime windows only
+- Train `LSTM_volatile` on volatile-regime windows only
+- Same architecture as baseline, but each sees only its regime's data
+- Handle regime transitions at window boundaries (a window spanning both regimes gets assigned to the dominant regime)
+- **Val fallback** (deviation from plan): the 2016-2019 val period had 0 volatile-dominant windows, so the volatile LSTM falls back to the full unfiltered val loader for early-stopping when fewer than 20 regime-filtered val windows exist
 
 **Deliverable:** Three trained LSTM models (baseline, calm, volatile) saved as checkpoints. ✅ Complete on branch `phase3-lstm`.
 
