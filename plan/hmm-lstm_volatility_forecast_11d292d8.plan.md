@@ -4,13 +4,13 @@ overview: Implement a regime-aware HMM-LSTM hybrid model for SPY volatility pred
 todos:
   - id: phase1-data
     content: "Phase 1: Data collection (yfinance SPY, put/call ratio, AAII sentiment), feature engineering (log returns, ranges, rolling stats), target variable (21-day realized vol), chronological split, normality diagnostics"
-    status: pending
+    status: completed
   - id: phase2-hmm
     content: "Phase 2: HMM regime detection -- train GaussianHMM vs GMMHMM, compare BIC/log-likelihood; test 1st vs 2nd order Markov; Viterbi regime assignment with sanity-check plots"
-    status: pending
+    status: completed
   - id: phase3-lstm
-    content: "Phase 3: LSTM training -- baseline LSTM on full data, then regime-specific LSTMs (calm + volatile) on HMM-split data; hyperparameter tuning on validation set"
-    status: pending
+    content: "Phase 3: LSTM training -- baseline LSTM on full data (3a DONE: PyTorch CPU + Optuna TPE, log-target, inverse-log MSE), then regime-specific LSTMs (calm + volatile) on HMM-split data"
+    status: in_progress
   - id: phase4-ensemble
     content: "Phase 4: Ensemble prediction -- combine regime LSTMs weighted by HMM soft probabilities"
     status: pending
@@ -27,7 +27,7 @@ isProject: false
 - **Stock**: SPY only (20+ years of daily data available via Yahoo Finance)
 - Drop XEQT (insufficient history) and MAG7 individual stocks from scope
 - **Target**: 21-day rolling realized volatility (as defined in the proposal)
-- **Chronological split**: Train 2005-2015, Validation 2015-2020, Test 2020-present
+- **Chronological split**: Train 2004-2015, Validation 2016-2019, Test 2020-present
 
 ---
 
@@ -101,13 +101,18 @@ This is the key model-selection phase with three diagnostic questions to answer:
 
 ## Phase 3: LSTM Training
 
-### 3a. Baseline LSTM (no regime separation)
+### 3a. Baseline LSTM (no regime separation) — DONE
 
-- Input: 21-day sliding window of all features
-- Output: predicted 21-day realized volatility
-- Architecture: 1-2 LSTM layers (64-128 units), dropout, dense output
-- Train on full training set (2005-2015), tune hyperparameters on validation (2015-2020)
-- Framework: PyTorch (or Keras -- user preference)
+- **Framework**: PyTorch, CPU-only (`torch` installed in `venv/`, `cuda=False`)
+- **Input**: configurable feature set (default: `Open, High, Low, Close, Volume, log_return, abs_return, oc_return, intraday_range, log_volume`) over a sliding window; `seq_len` is itself a tuned hyperparameter
+- **Output**: log of 21-day forward realized volatility; predictions are `exp()`-ed back before metric computation
+- **Target transform**: `log(realized_vol_21d)` trained with MSE loss; validation/test MSE is computed in the *original* (inverse-log) volatility scale so the scoring is invariant to the transform
+- **Feature scaling**: `StandardScaler` fit on the train split, applied to val/test
+- **Architecture**: stacked `nn.LSTM` → `nn.Linear(hidden_size, 1)`; final timestep used as the regression summary
+- **Hyperparameter tuning**: **Optuna** (TPE sampler) over `LSTM_SEARCH_SPACE` in `config.py` — `hidden_size`, `n_layers`, `dropout`, `lr`, `batch_size`, `seq_len` — scored by validation MSE (raw scale); `LSTM_N_TRIALS` controls the budget
+- **Final pass**: retrain with Optuna's best params on the full training set, early-stopping on val, then evaluate on test
+- **Artifacts**: `models/lstm_baseline.pt` (state_dict + hyperparameters + feature list), `models/lstm_baseline_scaler.joblib`
+- **Entry points**: `src/train_LSTM_baseline.py` (CLI: `--features`, `--n-trials`, `--tune-epochs`, `--final-epochs`, ...) and the runner notebook `notebooks/04_lstm_baseline.ipynb`
 
 ### 3b. Regime-Specific LSTMs
 
@@ -119,8 +124,8 @@ This is the key model-selection phase with three diagnostic questions to answer:
 
 **Hyperparameter tuning** (on validation set):
 
-- Hidden size, number of layers, dropout rate, learning rate, batch size
-- Use simple grid or random search
+- Hidden size, number of layers, dropout rate, learning rate, batch size, sequence length
+- Use **Optuna** TPE sampler (matching the baseline, for consistency); search space defined in `config.LSTM_SEARCH_SPACE`
 
 **Deliverable:** Three trained LSTM models (baseline, calm, volatile) saved as checkpoints.
 
@@ -169,7 +174,8 @@ StockVolatilitySight/
     data_loader.py        # yfinance download, sentiment loading
     features.py           # feature engineering, target calculation
     hmm_model.py          # HMM training, comparison, Viterbi
-    lstm_model.py         # LSTM architecture, train/eval loops
+    lstm_model.py         # LSTM architecture + sliding-window Dataset
+    train_LSTM_baseline.py # Phase 3a end-to-end: load → tune (Optuna) → retrain → test
     ensemble.py           # weighted prediction logic
     utils.py              # plotting, metrics, common helpers
   models/                 # saved model checkpoints
@@ -180,7 +186,8 @@ StockVolatilitySight/
 
 - `yfinance`, `pandas`, `numpy`, `scipy` (normality tests)
 - `hmmlearn` (GaussianHMM, GMMHMM)
-- `torch` (LSTM)
+- `torch` (LSTM, CPU build)
+- `optuna` (TPE hyperparameter search)
 - `scikit-learn` (scaling, metrics, optional tree baseline)
 - `matplotlib`, `seaborn` (plots)
 - `joblib` (model serialization)

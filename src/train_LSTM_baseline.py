@@ -151,7 +151,7 @@ def fit_model(
     epochs: int,
     patience: int,
     device: torch.device,
-    verbose: bool = False,
+    verbose: bool = True,
 ) -> tuple[nn.Module, float]:
     """
     Train with Adam + MSE on log-target. Early-stops on val MSE (raw scale).
@@ -243,7 +243,7 @@ def run_optuna_study(
         _, best_val = fit_model(
             model, train_loader, val_loader,
             lr=lr, epochs=tune_epochs, patience=patience,
-            device=device, verbose=False,
+            device=device, verbose=True,
         )
         return best_val
 
