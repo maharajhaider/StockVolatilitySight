@@ -93,16 +93,11 @@ LSTM_RANDOM_STATE = 42
 # Default input feature columns for the baseline LSTM.
 # Can be overridden on the command line via --features.
 LSTM_BASELINE_FEATURES = [
-    "Open",
-    "High",
-    "Low",
-    "Close",
-    "Volume",
     "log_return",
     "abs_return",
     "oc_return",
     "intraday_range",
-    "log_volume",
+    "relative_volume_21d",
 ]
 
 # Target column produced by features.build_features().

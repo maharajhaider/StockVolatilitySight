@@ -80,6 +80,15 @@ def add_log_volume(df: pd.DataFrame, volume_col: str = "Volume") -> pd.DataFrame
     return df
 
 
+def add_relative_volume(df: pd.DataFrame, volume_col: str = "Volume", window: int = 21) -> pd.DataFrame:
+    """Relative volume: Volume / 21-day rolling mean Volume."""
+    df = df.copy()
+    # Replace zeros to avoid division by zero
+    v = df[volume_col].replace(0, np.nan)
+    df[f"relative_volume_{window}d"] = v / v.rolling(window, min_periods=window).mean()
+    return df
+
+
 # ── Rolling features ───────────────────────────────────────────────────────────
 
 def add_rolling_stats(
@@ -286,6 +295,7 @@ def build_features(
     df = add_oc_return(df)
     df = add_intraday_range(df)
     df = add_log_volume(df)
+    df = add_relative_volume(df)
     df = add_rolling_stats(df, windows=rolling_windows)
     df = add_realized_volatility(df, window=vol_window, annualise=annualise_target)
 
