@@ -97,6 +97,40 @@ LSTM_EPOCHS = 100
 LSTM_PATIENCE = 10  # early stopping patience
 LSTM_RANDOM_STATE = 42
 
+# Default input feature columns for the baseline LSTM.
+# Can be overridden on the command line via --features.
+LSTM_BASELINE_FEATURES = [
+    "Open",
+    "High",
+    "Low",
+    "Close",
+    "Volume",
+    "log_return",
+    "abs_return",
+    "oc_return",
+    "intraday_range",
+    "log_volume",
+]
+
+# Target column produced by features.build_features().
+LSTM_TARGET = f"realized_vol_{VOL_WINDOW}d"
+
+# ── Optuna search space for the baseline LSTM ─────────────────────────────────
+# Categorical lists are passed to trial.suggest_categorical; (low, high) tuples
+# are passed to trial.suggest_float (log scale for lr) or suggest_int.
+LSTM_N_TRIALS = 20
+LSTM_TUNE_EPOCHS = 40      # epochs per trial during tuning (shorter than final)
+LSTM_FINAL_EPOCHS = 100    # epochs for the final retrain with best params
+
+LSTM_SEARCH_SPACE = {
+    "hidden_size": [32, 64, 128],
+    "n_layers": [1, 2, 3],
+    "dropout": (0.0, 0.5),       # continuous uniform
+    "lr": (1e-4, 1e-2),           # log-uniform
+    "batch_size": [32, 64, 128],
+    "seq_len": [10, 21, 42],
+}
+
 # ── Misc ──────────────────────────────────────────────────────────────────────
 RANDOM_STATE = 42
 NORMALITY_ALPHA = 0.05  # significance level for normality tests
