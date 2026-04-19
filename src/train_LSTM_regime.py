@@ -76,7 +76,7 @@ REGIMES = ("calm", "volatile")
 # Minimum number of regime-filtered val windows required to use the filtered
 # val loader. If fewer windows exist, fall back to the unfiltered val loader.
 # This handles the volatile regime during 2016-2019 (a calm-dominated period).
-MIN_VAL_WINDOWS = 20
+MIN_VAL_WINDOWS = 1
 
 
 # ── Regime-filtered dataset ───────────────────────────────────────────────────
