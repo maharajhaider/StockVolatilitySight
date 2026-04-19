@@ -163,6 +163,26 @@ This is the key model-selection phase with three diagnostic questions to answer:
 
 ---
 
+## Phase 6: Performance Iteration (Stationarity Fix)
+
+The initial ensemble successfully validated the architecture (it outperformed the baseline), but predictions systematically drifted upward over the 2020-2026 test set. This is a classic symptom of non-stationary input features.
+
+**1. Remove Raw Price Features:**
+- Remove raw `Open`, `High`, `Low`, `Close`, and `Volume` arrays from `config.LSTM_BASELINE_FEATURES`. 
+- Prices scale infinitely; 2026 values treated by a 2004-2015 `StandardScaler` create enormous `z-scores`, blowing up LSTM activations.
+- Reliance should exclusively be on percentage-based or differenced derivatives.
+
+**2. Enhance Engineered Features:**
+- Keep existing stationary metrics: `log_return`, `abs_return`, `oc_return`, `intraday_range`.
+- Exchange absolute `log_volume` for relative volume: e.g., Volume / 21-day Moving Average Volume.
+- Add multi-timeframe historically standardized features (e.g., fractional momentum).
+
+**3. Pipeline Re-execution:**
+- Rerun Optuna sweeps (`train_LSTM_baseline.py` & `train_LSTM_regime.py`).
+- Rerun extraction and evaluation (`ensemble.py` & `06_ensemble_eval.ipynb`) to confirm eliminating absolute-scale features removes the upward drift in long-term forecasting.
+
+---
+
 ## Project Structure
 
 ```
@@ -176,8 +196,9 @@ StockVolatilitySight/
     01_data_collection.ipynb
     02_eda_normality.ipynb
     03_hmm_regime.ipynb
-    04_lstm_training.ipynb
-    05_ensemble_eval.ipynb
+    04_lstm_baseline.ipynb
+    05_lstm_regime.ipynb
+    06_ensemble_eval.ipynb
   src/
     data_loader.py        # yfinance download, sentiment loading
     features.py           # feature engineering, target calculation
