@@ -18,7 +18,7 @@ END_DATE = None  # None → today
 
 # Chronological split boundaries
 TRAIN_END = "2015-12-31"
-VAL_END = "2019-12-31"
+VAL_END = "2020-04-30"
 # Test: 2020-01-01 → present
 
 # ── Target ────────────────────────────────────────────────────────────────────
