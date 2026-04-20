@@ -17,8 +17,8 @@ START_DATE = "2001-04-01"  # extra year so 21-day vol target is available from 2
 END_DATE = None  # None → today
 
 # Chronological split boundaries
-TRAIN_END = "2020-12-31"
-VAL_END = "2023-04-30"
+TRAIN_END = "2015-12-31"
+VAL_END = "2020-04-30"
 # Test: 2020-01-01 → present
 
 # ── Target ────────────────────────────────────────────────────────────────────
