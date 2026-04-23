@@ -1,0 +1,74 @@
+
+=== Regime-Specific LSTM Results ===
+{
+  "calm": {
+    "regime": "calm",
+    "best_params": {
+      "hidden_size": 128,
+      "n_layers": 1,
+      "dropout": 0.49134307838890223,
+      "lr": 0.00019257492274046608,
+      "batch_size": 64,
+      "seq_len": 21
+    },
+    "best_val_mse_raw": 3.197584010194987e-05,
+    "retrained_val_mse": 3.197584010194987e-05,
+    "test_metrics": {
+      "MSE": 0.0016998170176520944,
+      "RMSE": 0.04122883826494217,
+      "MAE": 0.03697677701711655,
+      "n_test_windows": 1455
+    },
+    "features": [
+      "Open",
+      "High",
+      "Low",
+      "Close",
+      "Volume",
+      "log_return",
+      "abs_return",
+      "oc_return",
+      "intraday_range",
+      "log_volume"
+    ],
+    "target": "realized_vol_21d",
+    "n_trials": 20,
+    "n_train_windows": 2886,
+    "n_val_windows": 1048
+  },
+  "volatile": {
+    "regime": "volatile",
+    "best_params": {
+      "hidden_size": 32,
+      "n_layers": 3,
+      "dropout": 0.4462001782684003,
+      "lr": 0.005662548072280986,
+      "batch_size": 32,
+      "seq_len": 42
+    },
+    "best_val_mse_raw": 1.783230072760489e-05,
+    "retrained_val_mse": 1.783230072760489e-05,
+    "test_metrics": {
+      "MSE": 0.000145410856930539,
+      "RMSE": 0.012058642692863941,
+      "MAE": 0.011379459872841835,
+      "n_test_windows": 1434
+    },
+    "features": [
+      "Open",
+      "High",
+      "Low",
+      "Close",
+      "Volume",
+      "log_return",
+      "abs_return",
+      "oc_return",
+      "intraday_range",
+      "log_volume"
+    ],
+    "target": "realized_vol_21d",
+    "n_trials": 20,
+    "n_train_windows": 134,
+    "n_val_windows": 41
+  }
+}

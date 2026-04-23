@@ -18,7 +18,7 @@ END_DATE = None  # None → today
 
 # Chronological split boundaries
 TRAIN_END = "2015-12-31"
-VAL_END = "2019-12-31"
+VAL_END = "2020-04-30"
 # Test: 2020-01-01 → present
 
 # ── Target ────────────────────────────────────────────────────────────────────
@@ -87,15 +87,37 @@ HMM_DURATION_PENALTY = 3000.0
 # Predictions must be exponentiated back: y_pred = exp(model_output)
 LOG_TRANSFORM_TARGET = True
 
-LSTM_SEQ_LEN = 21  # input sequence length (matches vol window)
-LSTM_HIDDEN_SIZE = 64
-LSTM_N_LAYERS = 2
-LSTM_DROPOUT = 0.2
-LSTM_LR = 1e-3
-LSTM_BATCH_SIZE = 64
-LSTM_EPOCHS = 100
 LSTM_PATIENCE = 10  # early stopping patience
 LSTM_RANDOM_STATE = 42
+
+# Default input feature columns for the baseline LSTM.
+# Can be overridden on the command line via --features.
+LSTM_BASELINE_FEATURES = [
+    "log_return",
+    "abs_return",
+    "oc_return",
+    "intraday_range",
+    "relative_volume_21d",
+]
+
+# Target column produced by features.build_features().
+LSTM_TARGET = f"realized_vol_{VOL_WINDOW}d"
+
+# ── Optuna search space for the baseline LSTM ─────────────────────────────────
+# Categorical lists are passed to trial.suggest_categorical; (low, high) tuples
+# are passed to trial.suggest_float (log scale for lr) or suggest_int.
+LSTM_N_TRIALS = 20
+LSTM_TUNE_EPOCHS = 40      # epochs per trial during tuning (shorter than final)
+LSTM_FINAL_EPOCHS = 100    # epochs for the final retrain with best params
+
+LSTM_SEARCH_SPACE = {
+    "hidden_size": [32, 64, 128],
+    "n_layers": [1, 2, 3],
+    "dropout": (0.0, 0.5),       # continuous uniform
+    "lr": (1e-4, 1e-2),           # log-uniform
+    "batch_size": [32, 64, 128],
+    "seq_len": [21, 42],
+}
 
 # ── Misc ──────────────────────────────────────────────────────────────────────
 RANDOM_STATE = 42
