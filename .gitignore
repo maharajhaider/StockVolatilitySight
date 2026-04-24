@@ -8,10 +8,6 @@ __pycache__/
 dist/
 build/
 
-# Data
-data/raw/
-data/processed/
-
 # Models
 models/*.joblib
 models/*.pt
