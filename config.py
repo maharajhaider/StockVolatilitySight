@@ -122,21 +122,22 @@ LSTM_STATIONARY_FEATURES = [
 # Default baseline LSTM = stationary + AAII sentiment (requires aaii_sentiment.csv/.xls in data/raw/).
 LSTM_BASELINE_FEATURES = LSTM_STATIONARY_FEATURES + SENTIMENT_FEATURES
 
-# ── Variant feature sets for the forward-looking features experiment ──────────
+# ── Variant feature sets for the seven-model comparison experiment ────────────
 # Variant A = current baseline (LSTM_BASELINE_FEATURES above — stationary + sentiment).
 # Variant B = A augmented with VIX-family forward-looking features.
-#
-# NOTE: the variant A/B LSTM checkpoints on disk prior to this merge were trained
-# against *pre-sentiment* LSTM_BASELINE_FEATURES (5 stationary features only).
-# After the sentiment merge, re-running nb 07 will retrain variant B against the
-# sentiment-augmented baseline for an apples-to-apples comparison. See
-# supplementary/discussion.md for the post-merge re-run checklist.
+# Variant H = A augmented with the HMM posterior p_volatile as an additional
+#             input feature. Tests whether the regime signal can be exploited
+#             through a feature in a single LSTM instead of via the regime-split
+#             ensemble architecture. Only p_volatile is added (p_calm is the
+#             collinear complement; Ridge stacking in src/gate_stacking.py
+#             already demonstrated both add the same information).
 #
 # HMM features are NOT augmented with VIX — regime labels remain derived from
 # price/volume + sentiment only so that variant A and variant B share the same
 # HMM regime sequence. This isolates the LSTM's response to the new features.
 LSTM_VARIANT_A_FEATURES = list(LSTM_BASELINE_FEATURES)
 LSTM_VARIANT_B_FEATURES = LSTM_VARIANT_A_FEATURES + VIX_FAMILY_FEATURES
+LSTM_VARIANT_H_FEATURES = LSTM_VARIANT_A_FEATURES + ["p_volatile"]
 
 # Target column produced by features.build_features().
 LSTM_TARGET = f"realized_vol_{VOL_WINDOW}d"

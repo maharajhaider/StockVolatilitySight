@@ -331,3 +331,78 @@ VIX features meaningfully improve point forecasts on calm-regime days and theref
 - *"Adding forward-looking VIX-family features reduces ensemble test MSE by 46% (2.6×10⁻⁵ → 1.4×10⁻⁵), statistically significant on MAE (DM p=0.033)."* — headline positive result from variant B.
 - *"However, the cross-correlation peak lag of LSTM predictions vs. the target only shifts from −17 days to −16 (ensemble) / −14 (baseline, calm). The persistence-shift floor is not structurally escaped."* — the F1 limitation survives.
 - *"The volatile-regime LSTM remains effectively constant (prediction std 1.6×10⁻⁴ vs. target std 4×10⁻³) under both variants, confirming F2 is a data-scarcity problem not a feature-set problem."* — F2 survives.
+
+## 2026-04-23 (late-late evening) — Post-sentiment-merge three-way comparison: variants A, H, B
+
+### What we did
+
+After rebasing partner's sentiment-analysis commits onto our variant-B branch, re-ran the whole analysis pipeline (nb 01 → nb 06) and then executed a new comparison notebook, `notebooks/08_seven_model_comparison.ipynb`, that adds a regime-as-feature variant to the experiment.
+
+Seven LSTMs trained, five test-set predictors evaluated:
+
+| Model | Trained by | Input features | # feats |
+|---|---|---|---|
+| `lstm_baseline.pt` | nb 04 | stationary + sentiment | 7 |
+| `lstm_calm.pt` | nb 05 | stationary + sentiment | 7 |
+| `lstm_volatile.pt` | nb 05 | stationary + sentiment | 7 |
+| `lstm_baseline_H.pt` | nb 08 | stationary + sentiment + `p_volatile` | 8 |
+| `lstm_baseline_B.pt` | nb 08 | stationary + sentiment + VIX family | 10 |
+| `lstm_calm_B.pt` | nb 08 | stationary + sentiment + VIX family | 10 |
+| `lstm_volatile_B.pt` | nb 08 | stationary + sentiment + VIX family | 10 |
+
+These 7 trained models produce 5 evaluable predictors on the test set:
+1. **Variant A baseline LSTM** (single model)
+2. **Variant A soft-probability ensemble** (3 LSTMs weighted by HMM `p_calm` / `p_volatile`)
+3. **Variant H baseline LSTM** (single model with `p_volatile` as a feature — no ensemble)
+4. **Variant B baseline LSTM** (single model)
+5. **Variant B soft-probability ensemble** (3 LSTMs weighted by HMM probs)
+
+The headline comparison tracks the 4 best per-variant predictors + naive: `{naive, A.ensemble, H.baseline, B.ensemble}`.
+
+### Test-set metrics (n = 1,434 common test rows, 2020-06-30 → 2026-03-16)
+
+| Predictor | MSE | RMSE | MAE | MAPE | F1 peak lag | F1 r@lag0 |
+|---|---|---|---|---|---|---|
+| naive (rolling_std_21) | 2.22×10⁻⁵ | 0.0047 | 0.0031 | 34.6 % | −21 | 0.458 |
+| **A ensemble** (stationary + sentiment) | **1.42×10⁻⁵** | 0.0038 | 0.0025 | 24.6 % | −16 | **0.600** |
+| **H baseline** (+ `p_volatile`) | 1.58×10⁻⁵ | 0.0040 | 0.0025 | 24.9 % | −16 | 0.502 |
+| **B ensemble** (+ VIX family) | **1.40×10⁻⁵** | 0.0037 | 0.0025 | 26.9 % | −17 | 0.541 |
+
+### Diebold-Mariano pairwise tests (h = 21, Bartlett HAC, HLN correction)
+
+| Comparison | MSE p | MAE p | Verdict (α = .05) |
+|---|---|---|---|
+| Naive vs A.ensemble | 0.09 | **0.002** | A wins MAE, tied MSE |
+| Naive vs H.baseline | 0.13 | **0.006** | H wins MAE, tied MSE |
+| Naive vs B.ensemble | 0.08 | **0.002** | B wins MAE, tied MSE |
+| A.ensemble vs H.baseline | 0.35 | 0.75 | **tied** |
+| A.ensemble vs B.ensemble | 0.79 | 0.98 | **tied** |
+| H.baseline vs B.ensemble | 0.27 | 0.73 | **tied** |
+
+### Key findings
+
+- **All three learned variants (A, H, B) are statistically indistinguishable** on both MSE and MAE. Adding `p_volatile` as a feature (H) or adding VIX family features (B) does not produce a detectable improvement over the sentiment-augmented baseline (A) at h = 21 with 1,434 test samples.
+- **All three beat naive on MAE** (p < 0.01) but only marginally on MSE (p ≈ 0.08-0.13) — confirms the sentiment-merged pipeline retains the statistical significance against persistence that the pre-merge variant A had.
+- **F1 (shift lag) holds under all variants.** Cross-correlation peak lag is −16 for A and H, −17 for B; no variant pulls the peak toward zero. The persistence-shift floor is a property of the daily-frequency × 21-day-forward target, not the feature set.
+- **F2 (volatile-LSTM degeneracy) now has a second failure mode.** Variant A's volatile LSTM remained near-constant (std 1.9×10⁻⁴, range 1.5×10⁻³) — the usual F2. Variant B's volatile LSTM **blew up into wild outputs** this run (std 0.65, max 2.71 — implausible 271 % daily vol). The soft-prob ensemble weighting limits the damage because `p_volatile` is small on most days, but this is strong evidence that the regime training is effectively *seed noise* — ~180 training windows dominated by the 2008 GFC lets Optuna converge to either "output the mean" or "output random garbage" with comparable probability.
+- **Variant H has the tightest peak cross-correlation** (r = 0.855 at lag −16) and the *lowest* zero-lag correlation (0.502). Interpretation: giving the model `p_volatile` directly makes it an *even tighter persistence predictor*, because the HMM probability is itself a lagged signal. H gets the regime information "for free" without the degeneracy risk of training a separate volatile LSTM, but loses a bit on zero-lag correlation compared to A.
+- **Variant A has the highest zero-lag correlation** (0.600). The full regime-split ensemble — despite its moving parts — captures same-day variance *slightly better* than either single-LSTM alternative.
+
+### Defensible claims for the paper
+
+- *"All three sentiment-augmented variants (ensemble, HMM-feature, VIX-ensemble) tie on test MSE / MAE at h = 21. Adding the HMM regime as an LSTM feature (H) does not beat the soft-probability regime-split ensemble (A). Adding forward-looking VIX-family features on top (B) does not beat either."* — headline negative result, ruling out two plausible fixes.
+- *"The persistence-shift floor (F1) survives all three augmentations: peak cross-correlation lag remains −16 to −17 days for every variant, vs the naive shift of −21."* — F1 as a structural property is strengthened.
+- *"The volatile-regime LSTM fails in two distinct modes depending on training seed: collapse to a near-constant mean (variant A) or wild non-stationary outputs (variant B). The soft-probability ensemble partially masks both failures because p_volatile is small on ~97 % of days, but both are symptoms of the F4 data-scarcity limit."* — F2 evidence is richer: not just one failure mode, but multiple that single-seed Optuna alternates between.
+
+### Rebase / merge notes (for reproducibility)
+
+- Rebased our variant-B branch onto origin/main (partner's two sentiment commits `5208a3a`, `241d644`). Conflicts resolved manually in `config.py` and `src/features.py`; binary parquets resolved by accepting origin's version and then regenerating via nb 01 with the merged `build_raw_dataset()` that joins BOTH sentiment and VIX.
+- Baseline LSTM input set is now 7 features (`LSTM_STATIONARY_FEATURES` + `SENTIMENT_FEATURES`), up from 5.
+- HMM input is now 13 features (`HMM_PRICE_VOLUME_FEATURES` + `["bullish", "bearish"]`), up from 11. Not augmented with VIX by design — variant B's VIX features go only into the LSTM inputs so A and B share the same regime labels.
+- `src/features.py::ensure_regime_probability_column()` added. Joins `p_volatile` from `regime_probabilities.parquet` onto the feature frame. Used once post-nb-03 to persist `p_volatile` into the train/val/test parquets so variant H's LSTM training can use it like any other `--features` column.
+- `notebooks/07_variant_b_experiment.ipynb` was superseded and now carries a notice at the top; the pre-merge single-seed variant B numbers it documents (5-feature baseline) are no longer directly comparable to the post-merge 7-feature baseline.
+
+### Open items (future work; not in this session)
+
+- **Variant O (OHLCV-only, "pre-everything" baseline)** — train HMM on `HMM_PRICE_VOLUME_FEATURES` (no sentiment), LSTMs on `LSTM_STATIONARY_FEATURES` (no sentiment / VIX / p_volatile). Provides the lower-bound reference for "did any of our post-phase-6 additions actually move the needle?" Would extend nb 08 from 4-way to 5-way.
+- **Multi-seed study** — 3 seeds per LSTM config. Deferred; would likely move to Google Colab for parallelization across notebook tabs (each tab = separate free-tier runtime).

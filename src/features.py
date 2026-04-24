@@ -343,6 +343,63 @@ def ensure_sentiment_columns(
     return df
 
 
+# ── HMM regime probability (loaded post-hoc from regime_probabilities.parquet) ─
+
+def ensure_regime_probability_column(
+    df: pd.DataFrame,
+    regime_probs_path: Path | str | None = None,
+) -> pd.DataFrame:
+    """
+    Guarantee a ``p_volatile`` column on *df*.
+
+    If *df* already has the column, this is a no-op. Otherwise the column is
+    joined from ``regime_probabilities.parquet`` (written by notebook 03),
+    aligned to *df.index*.
+
+    Only ``p_volatile`` is copied — ``p_calm = 1 − p_volatile`` is perfectly
+    collinear and would add no information (the Ridge stacking experiment in
+    ``src/gate_stacking.py`` explicitly demonstrated this). If you want both,
+    compute ``p_calm = 1 - df['p_volatile']`` at use-site.
+
+    Parameters
+    ----------
+    df                : feature DataFrame indexed by trading-day Date.
+    regime_probs_path : explicit path to regime_probabilities.parquet.
+                        If None, falls back to ``config.DATA_PROCESSED /
+                        "regime_probabilities.parquet"``.
+
+    Raises
+    ------
+    FileNotFoundError
+        If the regime-probability parquet does not exist. This file is
+        produced by notebook 03 after the HMM is trained; run that notebook
+        first.
+    """
+    if "p_volatile" in df.columns:
+        return df
+
+    from config import DATA_PROCESSED
+
+    if regime_probs_path is None:
+        regime_probs_path = DATA_PROCESSED / "regime_probabilities.parquet"
+    path = Path(regime_probs_path)
+    if not path.exists():
+        raise FileNotFoundError(
+            f"{path} not found. Run notebook 03 to train the HMM and write "
+            f"regime_probabilities.parquet before requesting p_volatile as a feature."
+        )
+
+    rp = pd.read_parquet(path)
+    if "p_volatile" not in rp.columns:
+        raise ValueError(
+            f"Expected 'p_volatile' column in {path}; got {list(rp.columns)}"
+        )
+
+    df = df.copy()
+    df["p_volatile"] = rp["p_volatile"].reindex(df.index)
+    return df
+
+
 # ── Master pipeline ────────────────────────────────────────────────────────────
 
 def build_features(
