@@ -1,0 +1,56 @@
+Running Notebook 01...
+[NbConvertApp] Converting notebook notebooks/01_data_collection.ipynb to notebook
+[NbConvertApp] Writing 519027 bytes to notebooks/01_data_collection.ipynb
+Running Notebook 02...
+[NbConvertApp] Converting notebook notebooks/02_eda_normality.ipynb to notebook
+[NbConvertApp] Writing 248930 bytes to notebooks/02_eda_normality.ipynb
+Running Notebook 03...
+[NbConvertApp] Converting notebook notebooks/03_hmm_regime.ipynb to notebook
+[NbConvertApp] Writing 520437 bytes to notebooks/03_hmm_regime.ipynb
+Running Notebook 04...
+[NbConvertApp] Converting notebook notebooks/04_lstm_baseline.ipynb to notebook
+[NbConvertApp] Writing 130399 bytes to notebooks/04_lstm_baseline.ipynb
+Running Notebook 05...
+[NbConvertApp] Converting notebook notebooks/05_lstm_regime.ipynb to notebook
+[NbConvertApp] Writing 18850 bytes to notebooks/05_lstm_regime.ipynb
+Running Notebook 06...
+21:23:06 | INFO    | ensemble | Loading required data splits...
+21:23:06 | INFO    | ensemble | Extracting aligned predictions for all LSTMs...
+21:23:06 | INFO    | ensemble | Loading model 'baseline'...
+21:23:07 | INFO    | ensemble | Loading model 'calm'...
+21:23:07 | INFO    | ensemble | Loading model 'volatile'...
+21:23:07 | INFO    | ensemble | Saved ensemble predictions to /Users/maharajhaider/gitrepo/StockVolatilitySight/data/processed/test_predictions.parquet
+
+==================================================
+PHASE 4: ENSEMBLE EVALUATION (TEST SET)
+==================================================
+Test period: 2020-06-30 to 2026-03-16
+Test size:   1434 trading days
+--------------------------------------------------
+Model: BASELINE
+  MSE:  0.000015
+  RMSE: 0.0039
+  MAE:  0.0025
+  MAPE: 25.30%
+--------------------------------------------------
+Model: CALM
+  MSE:  0.000021
+  RMSE: 0.0045
+  MAE:  0.0027
+  MAPE: 26.75%
+--------------------------------------------------
+Model: VOLATILE
+  MSE:  0.000091
+  RMSE: 0.0095
+  MAE:  0.0089
+  MAPE: 123.74%
+--------------------------------------------------
+Model: ENSEMBLE
+  MSE:  0.000018
+  RMSE: 0.0043
+  MAE:  0.0027
+  MAPE: 26.38%
+--------------------------------------------------
+[NbConvertApp] Converting notebook notebooks/06_ensemble_eval.ipynb to notebook
+[NbConvertApp] Writing 224176 bytes to notebooks/06_ensemble_eval.ipynb
+All complete!

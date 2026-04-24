@@ -6,69 +6,59 @@
     "best_params": {
       "hidden_size": 128,
       "n_layers": 1,
-      "dropout": 0.49134307838890223,
-      "lr": 0.00019257492274046608,
+      "dropout": 0.41712551540562215,
+      "lr": 0.003793140237878083,
       "batch_size": 64,
       "seq_len": 21
     },
-    "best_val_mse_raw": 3.197584010194987e-05,
-    "retrained_val_mse": 3.197584010194987e-05,
+    "best_val_mse_raw": 8.475465619994793e-06,
+    "retrained_val_mse": 8.475465619994793e-06,
     "test_metrics": {
-      "MSE": 0.0016998170176520944,
-      "RMSE": 0.04122883826494217,
-      "MAE": 0.03697677701711655,
-      "n_test_windows": 1455
+      "MSE": 1.9389850422157906e-05,
+      "RMSE": 0.004403390921652317,
+      "MAE": 0.0025096749886870384,
+      "n_test_windows": 701
     },
     "features": [
-      "Open",
-      "High",
-      "Low",
-      "Close",
-      "Volume",
       "log_return",
       "abs_return",
       "oc_return",
       "intraday_range",
-      "log_volume"
+      "relative_volume_21d"
     ],
     "target": "realized_vol_21d",
     "n_trials": 20,
-    "n_train_windows": 2886,
-    "n_val_windows": 1048
+    "n_train_windows": 4042,
+    "n_val_windows": 572
   },
   "volatile": {
     "regime": "volatile",
     "best_params": {
-      "hidden_size": 32,
+      "hidden_size": 64,
       "n_layers": 3,
-      "dropout": 0.4462001782684003,
-      "lr": 0.005662548072280986,
-      "batch_size": 32,
-      "seq_len": 42
+      "dropout": 0.29373800743747314,
+      "lr": 0.009668142033561996,
+      "batch_size": 64,
+      "seq_len": 21
     },
-    "best_val_mse_raw": 1.783230072760489e-05,
-    "retrained_val_mse": 1.783230072760489e-05,
+    "best_val_mse_raw": 1.7317959645879455e-05,
+    "retrained_val_mse": 1.7317959645879455e-05,
     "test_metrics": {
-      "MSE": 0.000145410856930539,
-      "RMSE": 0.012058642692863941,
-      "MAE": 0.011379459872841835,
-      "n_test_windows": 1434
+      "MSE": 2.805467738653533e-05,
+      "RMSE": 0.005296666640788317,
+      "MAE": 0.004220083821564913,
+      "n_test_windows": 701
     },
     "features": [
-      "Open",
-      "High",
-      "Low",
-      "Close",
-      "Volume",
       "log_return",
       "abs_return",
       "oc_return",
       "intraday_range",
-      "log_volume"
+      "relative_volume_21d"
     ],
     "target": "realized_vol_21d",
     "n_trials": 20,
-    "n_train_windows": 134,
-    "n_val_windows": 41
+    "n_train_windows": 218,
+    "n_val_windows": 12
   }
 }
