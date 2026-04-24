@@ -297,6 +297,17 @@ def parse_args() -> argparse.Namespace:
         "--output-prefix", default="lstm_baseline",
         help="Filename prefix used when saving model + scaler in models/",
     )
+    p.add_argument(
+        "--fixed-hparams", default=None,
+        help=(
+            "Path to a JSON file (previously emitted under "
+            "'=== Baseline LSTM results ===') whose `best_params` key holds "
+            "hyperparameters to reuse. If provided, Optuna is skipped entirely "
+            "and the model is retrained directly with those hyperparams. "
+            "Used for multi-seed runs — seed 42 does full Optuna, seeds 43/44 "
+            "reuse its JSON via this flag."
+        ),
+    )
     return p.parse_args()
 
 
@@ -344,20 +355,40 @@ def main() -> dict:
     logger.info("n_features=%d | rows — train=%d val=%d test=%d",
                 n_features, len(X_train), len(X_val), len(X_test))
 
-    # 5. Optuna study.
-    logger.info("Starting Optuna study with %d trials…", args.n_trials)
-    study = run_optuna_study(
-        X_train, y_train_log, X_val, y_val_log,
-        n_features=n_features,
-        n_trials=args.n_trials,
-        tune_epochs=args.tune_epochs,
-        patience=args.patience,
-        device=device,
-        seed=args.seed,
-    )
-    best = study.best_params
-    logger.info("Best val MSE (raw scale): %.8f", study.best_value)
-    logger.info("Best params: %s", best)
+    # 5. Hyperparameters — either from Optuna or from a fixed-hparams JSON.
+    if args.fixed_hparams:
+        import json as _json
+        fh_path = Path(args.fixed_hparams)
+        if not fh_path.exists():
+            raise FileNotFoundError(f"--fixed-hparams path not found: {fh_path}")
+        with open(fh_path) as _fh:
+            _prev = _json.load(_fh)
+        if "best_params" not in _prev:
+            raise KeyError(
+                f"{fh_path} has no 'best_params' key — expected a JSON emitted "
+                f"by a previous train_LSTM_baseline.py run."
+            )
+        best = _prev["best_params"]
+        study = None  # marker: no Optuna was run
+        logger.info(
+            "Skipping Optuna — using fixed hparams from %s",
+            fh_path,
+        )
+        logger.info("Fixed params: %s", best)
+    else:
+        logger.info("Starting Optuna study with %d trials…", args.n_trials)
+        study = run_optuna_study(
+            X_train, y_train_log, X_val, y_val_log,
+            n_features=n_features,
+            n_trials=args.n_trials,
+            tune_epochs=args.tune_epochs,
+            patience=args.patience,
+            device=device,
+            seed=args.seed,
+        )
+        best = study.best_params
+        logger.info("Best val MSE (raw scale): %.8f", study.best_value)
+        logger.info("Best params: %s", best)
 
     # 6. Retrain with best params on train, using val for early stopping.
     set_seed(args.seed)
@@ -406,12 +437,14 @@ def main() -> dict:
 
     result = {
         "best_params": best,
-        "best_val_mse_raw": float(study.best_value),
+        "best_val_mse_raw": float(study.best_value) if study is not None else float("nan"),
         "retrained_val_mse_raw": float(best_val_final),
         "test_metrics": test_metrics,
         "features": args.features,
         "target": args.target,
-        "n_trials": args.n_trials,
+        "n_trials": args.n_trials if study is not None else 0,
+        "seed": args.seed,
+        "fixed_hparams_source": str(args.fixed_hparams) if args.fixed_hparams else None,
     }
     print("\n=== Baseline LSTM results ===")
     print(json.dumps(result, indent=2))

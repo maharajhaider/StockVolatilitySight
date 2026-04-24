@@ -365,24 +365,31 @@ def train_one_regime(
         len(X_val), (viterbi_val == target_state).sum(),
     )
 
-    # ── 5. Optuna study ──────────────────────────────────────────────────────
-    logger.info("Starting Optuna study for '%s' regime (%d trials)…", regime, args.n_trials)
-    study = run_regime_optuna(
-        X_train, y_train_log, viterbi_train,
-        X_val,   y_val_log,   viterbi_val,
-        n_features=n_features,
-        target_state=target_state,
-        n_trials=args.n_trials,
-        tune_epochs=args.tune_epochs,
-        patience=args.patience,
-        device=device,
-        seed=args.seed,
-    )
-    best = study.best_params
-    logger.info(
-        "[%s] Best val MSE (raw scale): %.8f | params: %s",
-        regime, study.best_value, best,
-    )
+    # ── 5. Hyperparameters — either from Optuna or from a fixed-hparams JSON ─
+    fixed_regime_hparams = getattr(args, "_fixed_regime_hparams", None)
+    if fixed_regime_hparams is not None and regime in fixed_regime_hparams:
+        best = fixed_regime_hparams[regime]
+        study = None  # marker: no Optuna
+        logger.info("[%s] Skipping Optuna — using fixed hparams from JSON.", regime)
+        logger.info("[%s] Fixed params: %s", regime, best)
+    else:
+        logger.info("Starting Optuna study for '%s' regime (%d trials)…", regime, args.n_trials)
+        study = run_regime_optuna(
+            X_train, y_train_log, viterbi_train,
+            X_val,   y_val_log,   viterbi_val,
+            n_features=n_features,
+            target_state=target_state,
+            n_trials=args.n_trials,
+            tune_epochs=args.tune_epochs,
+            patience=args.patience,
+            device=device,
+            seed=args.seed,
+        )
+        best = study.best_params
+        logger.info(
+            "[%s] Best val MSE (raw scale): %.8f | params: %s",
+            regime, study.best_value, best,
+        )
 
     # ── 6. Final retrain with best params ────────────────────────────────────
     set_seed(args.seed)
@@ -459,14 +466,16 @@ def train_one_regime(
     return {
         "regime":              regime,
         "best_params":         best,
-        "best_val_mse_raw":    float(study.best_value),
+        "best_val_mse_raw":    float(study.best_value) if study is not None else float("nan"),
         "retrained_val_mse":   float(best_val_final),
         "test_metrics":        test_metrics,
         "features":            args.features,
         "target":              args.target,
-        "n_trials":            args.n_trials,
+        "n_trials":            args.n_trials if study is not None else 0,
         "n_train_windows":     int((viterbi_train == target_state).sum()),
         "n_val_windows":       int((viterbi_val   == target_state).sum()),
+        "seed":                args.seed,
+        "fixed_hparams":       (args.fixed_hparams or None),
     }
 
 
@@ -513,6 +522,16 @@ def parse_args() -> argparse.Namespace:
             "For variant O: models/hmm_meta_O.joblib."
         ),
     )
+    p.add_argument(
+        "--fixed-hparams", default=None,
+        help=(
+            "Path to a JSON file (previously emitted under "
+            "'=== Regime-Specific LSTM Results ===') holding per-regime "
+            "best_params. If provided, Optuna is skipped for both regimes "
+            "and each retrains with its loaded hparams. Used for multi-seed "
+            "runs — seed 42 does full Optuna, seeds 43/44 reuse its JSON."
+        ),
+    )
     return p.parse_args()
 
 
@@ -541,6 +560,30 @@ def main() -> dict:
         "Regime-LSTM training — output_suffix=%s, regime_probs=%s, hmm_meta=%s",
         args.output_suffix or "<none>", args.regime_probs_path, args.hmm_meta_path,
     )
+
+    # If --fixed-hparams is given, load the JSON and stash per-regime best_params
+    # on args as a private attribute. train_one_regime reads from _fixed_regime_hparams.
+    if args.fixed_hparams:
+        fh_path = Path(args.fixed_hparams)
+        if not fh_path.exists():
+            raise FileNotFoundError(f"--fixed-hparams path not found: {fh_path}")
+        with open(fh_path) as _fh:
+            _prev = json.load(_fh)
+        # Expected shape: {"calm": {..., "best_params": {...}}, "volatile": {...}}
+        fixed_hp = {}
+        for regime in REGIMES:
+            if regime in _prev and "best_params" in _prev[regime]:
+                fixed_hp[regime] = _prev[regime]["best_params"]
+            else:
+                logger.warning(
+                    "--fixed-hparams JSON missing best_params for regime %s — "
+                    "will fall back to Optuna for this regime.",
+                    regime,
+                )
+        args._fixed_regime_hparams = fixed_hp
+        logger.info("Loaded fixed hparams for regimes: %s", list(fixed_hp.keys()))
+    else:
+        args._fixed_regime_hparams = None
 
     device = torch.device("cpu")
     set_seed(args.seed)
