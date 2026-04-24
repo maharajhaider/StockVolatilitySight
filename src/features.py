@@ -11,6 +11,8 @@ Key transformations
 - 21-day forward realized volatility (target variable):
       sigma_t = sqrt( (1/m) * sum_{j=1}^{m} (r_{t+j} - r_bar)^2 )
   per Andersen & Bollerslev (1998) adapted for daily data
+- AAII investor-sentiment survey columns (bullish / bearish / neutral /
+  bull_bear_spread), forward-filled to each trading day from weekly releases
 
 All transforms produce NaN for any rows that cannot be computed (e.g. the
 first row for log_return, or the last 20 rows for the target). The caller
@@ -20,12 +22,13 @@ is responsible for dropping NaNs before model training.
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from typing import Sequence
 
 import numpy as np
 import pandas as pd
 
-from config import ROLLING_WINDOWS, VOL_WINDOW, TRADING_DAYS_YEAR
+from config import DATA_RAW, ROLLING_WINDOWS, SENTIMENT_FEATURES, VOL_WINDOW, TRADING_DAYS_YEAR
 
 logger = logging.getLogger(__name__)
 
@@ -262,6 +265,42 @@ def variance_inflation_check(
         return pd.DataFrame(columns=["feature", "VIF"])
 
 
+# ── Sentiment (AAII) ───────────────────────────────────────────────────────────
+
+def ensure_sentiment_columns(
+    df: pd.DataFrame,
+    raw_dir: Path | str | None = None,
+) -> pd.DataFrame:
+    """
+    Guarantee ``SENTIMENT_FEATURES`` on *df*, aligned to its index.
+
+    If columns are missing (e.g. raw merge skipped the file), load from *raw_dir*
+    (default ``config.DATA_RAW``) using ``load_aaii_sentiment`` (``.csv`` / ``.xlsx`` /
+    ``.xls``), forward-fill weekly releases to daily rows, then join. Raises
+    ``FileNotFoundError`` if no supported file is present.
+    """
+    from src.data_loader import _forward_fill_weekly_to_daily, load_aaii_sentiment
+
+    rd = Path(raw_dir) if raw_dir is not None else DATA_RAW
+    need_load = any(c not in df.columns for c in SENTIMENT_FEATURES)
+    if need_load:
+        sent = load_aaii_sentiment(raw_dir=rd)
+        if sent.empty:
+            raise FileNotFoundError(
+                "AAII sentiment is required for the feature matrix. Download weekly "
+                "survey results from https://www.aaii.com/sentimentsurvey/sent_results "
+                f"and save as {rd / 'aaii_sentiment.csv'} (or .xlsx / .xls)"
+            )
+        aligned = _forward_fill_weekly_to_daily(sent, df.index)
+        for c in SENTIMENT_FEATURES:
+            if c not in aligned.columns:
+                raise ValueError(f"Sentiment loader missing expected column {c!r}")
+            df[c] = aligned[c].reindex(df.index).to_numpy()
+    for c in SENTIMENT_FEATURES:
+        df[c] = df[c].ffill()
+    return df
+
+
 # ── Master pipeline ────────────────────────────────────────────────────────────
 
 def build_features(
@@ -269,6 +308,7 @@ def build_features(
     vol_window: int = VOL_WINDOW,
     rolling_windows: Sequence[int] = ROLLING_WINDOWS,
     annualise_target: bool = False,
+    raw_dir: Path | str | None = None,
 ) -> pd.DataFrame:
     """
     Apply all feature engineering steps to *raw_df* in sequence.
@@ -282,6 +322,7 @@ def build_features(
     5.  Log volume
     6.  Rolling mean / std of log_return (multiple windows)
     7.  Forward realized volatility target
+    8.  AAII sentiment columns (weekly → daily forward fill)
 
     NaN rows at the start (due to lagging) and end (due to forward target)
     are NOT dropped here — the caller decides when to drop them.
@@ -298,6 +339,7 @@ def build_features(
     df = add_relative_volume(df)
     df = add_rolling_stats(df, windows=rolling_windows)
     df = add_realized_volatility(df, window=vol_window, annualise=annualise_target)
+    df = ensure_sentiment_columns(df, raw_dir=raw_dir)
 
     target_col = f"realized_vol_{vol_window}d"
     n_nan_start = df["log_return"].isna().sum()

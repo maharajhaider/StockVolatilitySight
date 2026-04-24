@@ -133,33 +133,59 @@ def load_aaii_sentiment(
     Load AAII weekly sentiment survey data.
 
     Source: https://www.aaii.com/sentimentsurvey/sent_results
-    Download the Excel/CSV export and save as data/raw/aaii_sentiment.csv
+    Download the export from AAII (often **Excel** `.xls` / `.xlsx`, sometimes CSV) and
+    save under ``data/raw/`` as ``aaii_sentiment.csv`` **or** ``aaii_sentiment.xlsx`` /
+    ``aaii_sentiment.xls`` (any of these names is detected automatically).
 
     Expected columns: Date, Bullish, Neutral, Bearish (percentages as decimals or %)
     Returns a DataFrame with columns: bullish, neutral, bearish, bull_bear_spread,
     indexed by date (forward-filled to daily frequency for merging).
     """
     if csv_path is None and raw_dir is not None:
-        candidate = Path(raw_dir) / "aaii_sentiment.csv"
-        if candidate.exists():
-            csv_path = candidate
+        rd = Path(raw_dir)
+        for name in (
+            "aaii_sentiment.csv",
+            "aaii_sentiment.xlsx",
+            "aaii_sentiment.xls",
+        ):
+            candidate = rd / name
+            if candidate.exists():
+                csv_path = candidate
+                break
 
     if csv_path is None or not Path(csv_path).exists():
         logger.warning(
-            "AAII sentiment CSV not found. "
+            "AAII sentiment file not found. "
             "Download from https://www.aaii.com/sentimentsurvey/sent_results "
-            "and save as data/raw/aaii_sentiment.csv"
+            "and save as data/raw/aaii_sentiment.csv (or .xlsx / .xls)"
         )
         return pd.DataFrame(columns=["bullish", "neutral", "bearish", "bull_bear_spread"])
 
-    df = pd.read_csv(csv_path)
+    path = Path(csv_path)
+    suffix = path.suffix.lower()
+    if suffix in (".xls", ".xlsx"):
+        # Both the .xls and .xlsx exports from AAII share the same 5-row preamble:
+        #   row 0, 1 – blank / merged organisation banner
+        #   row 2    – "Reported" + span labels
+        #   row 3    – real column names: Date, Bullish, Neutral, Bearish …  ← header
+        #   row 4    – blank separator
+        #   row 5+   – weekly data (1987-06-26 …)
+        # Skip rows 0-2 (junk) and row 4 (blank separator); use row 3 as the header.
+        # read_excel auto-parses Excel date cells; passing dtype={"date": object} is
+        # not possible before we know the column name, so we also coerce below.
+        df = pd.read_excel(path, skiprows=[0, 1, 2, 4])
+    else:
+        df = pd.read_csv(path)
 
     # Normalize column names to lowercase, strip whitespace
     df.columns = df.columns.str.strip().str.lower().str.replace(" ", "_")
 
     # Identify date column
     date_col = next((c for c in df.columns if "date" in c), df.columns[0])
-    df[date_col] = pd.to_datetime(df[date_col])
+    # Coerce unparseable values (e.g. footer summary rows like "Reported") to NaT,
+    # then drop them.  This guards against any remaining junk rows for all formats.
+    df[date_col] = pd.to_datetime(df[date_col], errors="coerce")
+    df = df.dropna(subset=[date_col])
     df = df.set_index(date_col).sort_index()
 
     # Identify percentage columns

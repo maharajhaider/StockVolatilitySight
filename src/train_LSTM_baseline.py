@@ -20,7 +20,7 @@ Artifacts saved to models/:
 Example
 -------
     python train_LSTM_baseline.py --n-trials 20
-    python train_LSTM_baseline.py --features Close Volume log_return abs_return
+    python train_LSTM_baseline.py --output-prefix lstm_core --features log_return abs_return
 """
 
 from __future__ import annotations

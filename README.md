@@ -23,9 +23,9 @@ Download these manually and save to `data/raw/`:
 | File | Source |
 |------|--------|
 | `put_call_ratio.csv` | https://www.cboe.com/us/options/market_statistics/daily/ |
-| `aaii_sentiment.csv` | https://www.aaii.com/sentimentsurvey/sent_results |
+| `aaii_sentiment.csv` (or `.xlsx` / `.xls` with the same base name) | https://www.aaii.com/sentimentsurvey/sent_results |
 
-The pipeline runs without them (producing NaN columns for those features).
+Put/call can be omitted (those columns stay NaN). The default model features include AAII sentiment, so you need one of the `aaii_sentiment.*` files above for `build_features` / training unless you override features to exclude sentiment.
 
 ## Notebooks
 

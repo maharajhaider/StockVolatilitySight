@@ -36,23 +36,21 @@ OHLCV_FEATURES = [
 
 ROLLING_WINDOWS = [5, 10, 21]  # windows for rolling mean/std features
 
+# neutral  excluded: = 1 - bullish - bearish (exact linear combination).
+# bull_bear_spread excluded: = bullish - bearish (exact linear combination).
+# Keeping only bullish + bearish gives the sentiment signal without
+# redundant features that add noise and cause rank-deficient covariances in HMM.
 SENTIMENT_FEATURES = [
     "bullish",
     "bearish",
-    "neutral",
-    "bull_bear_spread",
 ]
 
 PUTCALL_FEATURES = [
     "put_call_ratio",
 ]
 
-# Features used as HMM input.
-# Source: notebook 01 drop_correlated_features(threshold=0.95) output.
-# rolling_abs_mean_{5,10,21} were the only features dropped (r > 0.95 with
-# rolling_std_* counterparts); the remaining 11 features are kept as-is.
-# The VIF check in notebook 01 is informational only and removes nothing.
-HMM_FEATURES = [
+# Price / volume HMM inputs (notebook 01 correlation prune; VIF informational only).
+HMM_PRICE_VOLUME_FEATURES = [
     "log_return",
     "abs_return",
     "oc_return",
@@ -65,6 +63,13 @@ HMM_FEATURES = [
     "rolling_mean_21",
     "rolling_std_21",
 ]
+
+# HMM input = stationary market features + bullish/bearish sentiment levels.
+# neutral is excluded (= 1 - bullish - bearish, perfectly collinear → singular cov).
+# bull_bear_spread is excluded (= bullish - bearish, linear combination of the two).
+# Keeping only bullish + bearish breaks the linear dependency while still giving
+# the HMM the sentiment signal without a rank-deficient covariance matrix.
+HMM_FEATURES = HMM_PRICE_VOLUME_FEATURES + ["bullish", "bearish"]
 
 # ── HMM ───────────────────────────────────────────────────────────────────────
 HMM_N_STATES = 2
@@ -90,15 +95,17 @@ LOG_TRANSFORM_TARGET = True
 LSTM_PATIENCE = 10  # early stopping patience
 LSTM_RANDOM_STATE = 42
 
-# Default input feature columns for the baseline LSTM.
-# Can be overridden on the command line via --features.
-LSTM_BASELINE_FEATURES = [
+# Stationary LSTM inputs without survey data (Phase 6); use for ablations.
+LSTM_STATIONARY_FEATURES = [
     "log_return",
     "abs_return",
     "oc_return",
     "intraday_range",
     "relative_volume_21d",
 ]
+
+# Default baseline LSTM = stationary + AAII sentiment (requires aaii_sentiment.csv in data/raw/).
+LSTM_BASELINE_FEATURES = LSTM_STATIONARY_FEATURES + SENTIMENT_FEATURES
 
 # Target column produced by features.build_features().
 LSTM_TARGET = f"realized_vol_{VOL_WINDOW}d"
