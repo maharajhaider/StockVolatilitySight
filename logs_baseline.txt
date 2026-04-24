@@ -3,31 +3,26 @@
 {
   "best_params": {
     "hidden_size": 128,
-    "n_layers": 1,
-    "dropout": 0.13070780870686607,
-    "lr": 0.00020895184085474152,
-    "batch_size": 64,
+    "n_layers": 2,
+    "dropout": 0.03252579649263976,
+    "lr": 0.007902619549708232,
+    "batch_size": 32,
     "seq_len": 42
   },
-  "best_val_mse_raw": 3.223297608201392e-05,
-  "retrained_val_mse_raw": 3.223297608201392e-05,
+  "best_val_mse_raw": 3.9455007936339825e-05,
+  "retrained_val_mse_raw": 3.9455007936339825e-05,
   "test_metrics": {
-    "MSE": 0.0024657545145601034,
-    "RMSE": 0.04965636506676674,
-    "MAE": 0.04577644541859627,
+    "MSE": 1.5175318367255386e-05,
+    "RMSE": 0.003895551199093461,
+    "MAE": 0.00246306206099689,
     "n_test_windows": 1434
   },
   "features": [
-    "Open",
-    "High",
-    "Low",
-    "Close",
-    "Volume",
     "log_return",
     "abs_return",
     "oc_return",
     "intraday_range",
-    "log_volume"
+    "relative_volume_21d"
   ],
   "target": "realized_vol_21d",
   "n_trials": 20
