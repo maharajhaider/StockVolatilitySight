@@ -26,3 +26,14 @@ Thumbs.db
 
 # Environment variables
 .env
+
+# Others
+ignore/
+
+# LaTeX build artifacts
+*.aux
+*.fdb_latexmk
+*.fls
+*.synctex.gz
+supplementary/*.log
+supplementary/*.out

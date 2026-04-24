@@ -1,0 +1,226 @@
+20:57:56 | INFO    | train_LSTM_regime | Split sizes — train=3710, val=1089, test=1481
+20:57:56 | INFO    | train_LSTM_regime | === Training regime LSTM: calm (state=1) ===
+20:57:56 | INFO    | train_LSTM_regime | Regime calm: train=2034 rows (1879 in regime), val=1089 rows (1044 in regime)
+20:57:56 | INFO    | train_LSTM_regime | Starting Optuna study for 'calm' regime (20 trials)…
+20:57:56 | INFO    | train_LSTM_regime | RegimeWindowDataset(regime=volatile): 1871 / 2014 windows kept
+20:57:56 | INFO    | train_LSTM_regime | RegimeWindowDataset(regime=volatile): 1035 / 1069 windows kept
+20:58:03 | INFO    | train_LSTM_regime | RegimeWindowDataset(regime=volatile): 1831 / 1993 windows kept
+20:58:03 | INFO    | train_LSTM_regime | RegimeWindowDataset(regime=volatile): 1024 / 1048 windows kept
+20:58:16 | INFO    | train_LSTM_regime | RegimeWindowDataset(regime=volatile): 1831 / 1993 windows kept
+20:58:16 | INFO    | train_LSTM_regime | RegimeWindowDataset(regime=volatile): 1024 / 1048 windows kept
+20:59:00 | INFO    | train_LSTM_regime | RegimeWindowDataset(regime=volatile): 1871 / 2014 windows kept
+20:59:00 | INFO    | train_LSTM_regime | RegimeWindowDataset(regime=volatile): 1035 / 1069 windows kept
+20:59:23 | INFO    | train_LSTM_regime | RegimeWindowDataset(regime=volatile): 1871 / 2014 windows kept
+20:59:23 | INFO    | train_LSTM_regime | RegimeWindowDataset(regime=volatile): 1035 / 1069 windows kept
+20:59:27 | INFO    | train_LSTM_regime | RegimeWindowDataset(regime=volatile): 1871 / 2014 windows kept
+20:59:27 | INFO    | train_LSTM_regime | RegimeWindowDataset(regime=volatile): 1035 / 1069 windows kept
+21:00:14 | INFO    | train_LSTM_regime | RegimeWindowDataset(regime=volatile): 1871 / 2014 windows kept
+21:00:14 | INFO    | train_LSTM_regime | RegimeWindowDataset(regime=volatile): 1035 / 1069 windows kept
+21:00:22 | INFO    | train_LSTM_regime | RegimeWindowDataset(regime=volatile): 1831 / 1993 windows kept
+21:00:22 | INFO    | train_LSTM_regime | RegimeWindowDataset(regime=volatile): 1024 / 1048 windows kept
+21:00:34 | INFO    | train_LSTM_regime | RegimeWindowDataset(regime=volatile): 1871 / 2014 windows kept
+21:00:34 | INFO    | train_LSTM_regime | RegimeWindowDataset(regime=volatile): 1035 / 1069 windows kept
+21:00:39 | INFO    | train_LSTM_regime | RegimeWindowDataset(regime=volatile): 1831 / 1993 windows kept
+21:00:39 | INFO    | train_LSTM_regime | RegimeWindowDataset(regime=volatile): 1024 / 1048 windows kept
+21:01:06 | INFO    | train_LSTM_regime | RegimeWindowDataset(regime=volatile): 1871 / 2014 windows kept
+21:01:06 | INFO    | train_LSTM_regime | RegimeWindowDataset(regime=volatile): 1035 / 1069 windows kept
+21:01:18 | INFO    | train_LSTM_regime | RegimeWindowDataset(regime=volatile): 1871 / 2014 windows kept
+21:01:18 | INFO    | train_LSTM_regime | RegimeWindowDataset(regime=volatile): 1035 / 1069 windows kept
+21:01:21 | INFO    | train_LSTM_regime | RegimeWindowDataset(regime=volatile): 1871 / 2014 windows kept
+21:01:21 | INFO    | train_LSTM_regime | RegimeWindowDataset(regime=volatile): 1035 / 1069 windows kept
+21:01:30 | INFO    | train_LSTM_regime | RegimeWindowDataset(regime=volatile): 1871 / 2014 windows kept
+21:01:30 | INFO    | train_LSTM_regime | RegimeWindowDataset(regime=volatile): 1035 / 1069 windows kept
+21:02:02 | INFO    | train_LSTM_regime | RegimeWindowDataset(regime=volatile): 1871 / 2014 windows kept
+21:02:02 | INFO    | train_LSTM_regime | RegimeWindowDataset(regime=volatile): 1035 / 1069 windows kept
+21:02:11 | INFO    | train_LSTM_regime | RegimeWindowDataset(regime=volatile): 1871 / 2014 windows kept
+21:02:11 | INFO    | train_LSTM_regime | RegimeWindowDataset(regime=volatile): 1035 / 1069 windows kept
+21:02:20 | INFO    | train_LSTM_regime | RegimeWindowDataset(regime=volatile): 1871 / 2014 windows kept
+21:02:20 | INFO    | train_LSTM_regime | RegimeWindowDataset(regime=volatile): 1035 / 1069 windows kept
+21:02:38 | INFO    | train_LSTM_regime | RegimeWindowDataset(regime=volatile): 1871 / 2014 windows kept
+21:02:38 | INFO    | train_LSTM_regime | RegimeWindowDataset(regime=volatile): 1035 / 1069 windows kept
+21:02:46 | INFO    | train_LSTM_regime | RegimeWindowDataset(regime=volatile): 1831 / 1993 windows kept
+21:02:46 | INFO    | train_LSTM_regime | RegimeWindowDataset(regime=volatile): 1024 / 1048 windows kept
+21:03:04 | INFO    | train_LSTM_regime | RegimeWindowDataset(regime=volatile): 1871 / 2014 windows kept
+21:03:04 | INFO    | train_LSTM_regime | RegimeWindowDataset(regime=volatile): 1035 / 1069 windows kept
+21:03:06 | INFO    | train_LSTM_regime | [calm] Best val MSE (raw scale): 0.00003808 | params: {'hidden_size': 128, 'n_layers': 1, 'dropout': 0.19584403787563986, 'lr': 0.00323067461734994, 'batch_size': 64, 'seq_len': 21}
+21:03:06 | INFO    | train_LSTM_regime | RegimeWindowDataset(regime=volatile): 1871 / 2014 windows kept
+21:03:06 | INFO    | train_LSTM_regime | RegimeWindowDataset(regime=volatile): 1035 / 1069 windows kept
+21:03:06 | INFO    | train_LSTM_regime | [calm] Final retrain — using regime-filtered val loader (1035 windows).
+21:03:06 | INFO    | train_LSTM_baseline | epoch   1 | train_log_mse=4.933530 | val_mse_raw=0.00005063 | best=0.00005063
+21:03:07 | INFO    | train_LSTM_baseline | epoch   2 | train_log_mse=0.178250 | val_mse_raw=0.00004272 | best=0.00004272
+21:03:07 | INFO    | train_LSTM_baseline | epoch   3 | train_log_mse=0.147309 | val_mse_raw=0.00004530 | best=0.00004272
+21:03:07 | INFO    | train_LSTM_baseline | epoch   4 | train_log_mse=0.137542 | val_mse_raw=0.00004647 | best=0.00004272
+21:03:08 | INFO    | train_LSTM_baseline | epoch   5 | train_log_mse=0.128084 | val_mse_raw=0.00004529 | best=0.00004272
+21:03:08 | INFO    | train_LSTM_baseline | epoch   6 | train_log_mse=0.127020 | val_mse_raw=0.00004210 | best=0.00004210
+21:03:09 | INFO    | train_LSTM_baseline | epoch   7 | train_log_mse=0.124135 | val_mse_raw=0.00004101 | best=0.00004101
+21:03:09 | INFO    | train_LSTM_baseline | epoch   8 | train_log_mse=0.122345 | val_mse_raw=0.00004005 | best=0.00004005
+21:03:09 | INFO    | train_LSTM_baseline | epoch   9 | train_log_mse=0.123971 | val_mse_raw=0.00004093 | best=0.00004005
+21:03:10 | INFO    | train_LSTM_baseline | epoch  10 | train_log_mse=0.124392 | val_mse_raw=0.00003897 | best=0.00003897
+21:03:10 | INFO    | train_LSTM_baseline | epoch  11 | train_log_mse=0.122186 | val_mse_raw=0.00003980 | best=0.00003897
+21:03:10 | INFO    | train_LSTM_baseline | epoch  12 | train_log_mse=0.122921 | val_mse_raw=0.00003808 | best=0.00003808
+21:03:11 | INFO    | train_LSTM_baseline | epoch  13 | train_log_mse=0.119939 | val_mse_raw=0.00003818 | best=0.00003808
+21:03:11 | INFO    | train_LSTM_baseline | epoch  14 | train_log_mse=0.123169 | val_mse_raw=0.00003821 | best=0.00003808
+21:03:12 | INFO    | train_LSTM_baseline | epoch  15 | train_log_mse=0.124446 | val_mse_raw=0.00003910 | best=0.00003808
+21:03:12 | INFO    | train_LSTM_baseline | epoch  16 | train_log_mse=0.120458 | val_mse_raw=0.00003869 | best=0.00003808
+21:03:12 | INFO    | train_LSTM_baseline | epoch  17 | train_log_mse=0.120058 | val_mse_raw=0.00003856 | best=0.00003808
+21:03:13 | INFO    | train_LSTM_baseline | epoch  18 | train_log_mse=0.119212 | val_mse_raw=0.00003818 | best=0.00003808
+21:03:13 | INFO    | train_LSTM_baseline | epoch  19 | train_log_mse=0.118707 | val_mse_raw=0.00003839 | best=0.00003808
+21:03:14 | INFO    | train_LSTM_baseline | epoch  20 | train_log_mse=0.126963 | val_mse_raw=0.00003907 | best=0.00003808
+21:03:14 | INFO    | train_LSTM_baseline | epoch  21 | train_log_mse=0.120059 | val_mse_raw=0.00003838 | best=0.00003808
+21:03:14 | INFO    | train_LSTM_baseline | epoch  22 | train_log_mse=0.117021 | val_mse_raw=0.00003841 | best=0.00003808
+21:03:14 | INFO    | train_LSTM_baseline | Early stopping at epoch 22
+21:03:14 | INFO    | train_LSTM_regime | [calm] Final retrain — best val MSE (raw): 0.00003808
+21:03:15 | INFO    | train_LSTM_regime | [calm] Test metrics: {'MSE': 1.4159288184600882e-05, 'RMSE': 0.003762882901355624, 'MAE': 0.0024552461691200733, 'n_test_windows': 1461}
+21:03:15 | INFO    | train_LSTM_regime | [calm] Saved model → /Users/zaidt/Desktop/cpsc440/StockVolatilitySight/models/lstm_calm_B.pt
+21:03:15 | INFO    | train_LSTM_regime | [calm] Saved scaler → /Users/zaidt/Desktop/cpsc440/StockVolatilitySight/models/lstm_calm_B_scaler.joblib
+21:03:15 | INFO    | train_LSTM_regime | === Training regime LSTM: volatile (state=0) ===
+21:03:15 | INFO    | train_LSTM_regime | Regime volatile: train=2034 rows (155 in regime), val=1089 rows (45 in regime)
+21:03:15 | INFO    | train_LSTM_regime | Starting Optuna study for 'volatile' regime (20 trials)…
+21:03:15 | INFO    | train_LSTM_regime | RegimeWindowDataset(regime=calm): 143 / 2014 windows kept
+21:03:15 | INFO    | train_LSTM_regime | RegimeWindowDataset(regime=calm): 34 / 1069 windows kept
+21:03:15 | INFO    | train_LSTM_regime | RegimeWindowDataset(regime=calm): 162 / 1993 windows kept
+21:03:15 | INFO    | train_LSTM_regime | RegimeWindowDataset(regime=calm): 24 / 1048 windows kept
+21:03:17 | INFO    | train_LSTM_regime | RegimeWindowDataset(regime=calm): 162 / 1993 windows kept
+21:03:17 | INFO    | train_LSTM_regime | RegimeWindowDataset(regime=calm): 24 / 1048 windows kept
+21:03:19 | INFO    | train_LSTM_regime | RegimeWindowDataset(regime=calm): 143 / 2014 windows kept
+21:03:19 | INFO    | train_LSTM_regime | RegimeWindowDataset(regime=calm): 34 / 1069 windows kept
+21:03:21 | INFO    | train_LSTM_regime | RegimeWindowDataset(regime=calm): 143 / 2014 windows kept
+21:03:21 | INFO    | train_LSTM_regime | RegimeWindowDataset(regime=calm): 34 / 1069 windows kept
+21:03:22 | INFO    | train_LSTM_regime | RegimeWindowDataset(regime=calm): 143 / 2014 windows kept
+21:03:22 | INFO    | train_LSTM_regime | RegimeWindowDataset(regime=calm): 34 / 1069 windows kept
+21:03:25 | INFO    | train_LSTM_regime | RegimeWindowDataset(regime=calm): 143 / 2014 windows kept
+21:03:25 | INFO    | train_LSTM_regime | RegimeWindowDataset(regime=calm): 34 / 1069 windows kept
+21:03:26 | INFO    | train_LSTM_regime | RegimeWindowDataset(regime=calm): 162 / 1993 windows kept
+21:03:26 | INFO    | train_LSTM_regime | RegimeWindowDataset(regime=calm): 24 / 1048 windows kept
+21:03:27 | INFO    | train_LSTM_regime | RegimeWindowDataset(regime=calm): 143 / 2014 windows kept
+21:03:27 | INFO    | train_LSTM_regime | RegimeWindowDataset(regime=calm): 34 / 1069 windows kept
+21:03:28 | INFO    | train_LSTM_regime | RegimeWindowDataset(regime=calm): 162 / 1993 windows kept
+21:03:28 | INFO    | train_LSTM_regime | RegimeWindowDataset(regime=calm): 24 / 1048 windows kept
+21:03:30 | INFO    | train_LSTM_regime | RegimeWindowDataset(regime=calm): 162 / 1993 windows kept
+21:03:30 | INFO    | train_LSTM_regime | RegimeWindowDataset(regime=calm): 24 / 1048 windows kept
+21:03:33 | INFO    | train_LSTM_regime | RegimeWindowDataset(regime=calm): 162 / 1993 windows kept
+21:03:33 | INFO    | train_LSTM_regime | RegimeWindowDataset(regime=calm): 24 / 1048 windows kept
+21:03:35 | INFO    | train_LSTM_regime | RegimeWindowDataset(regime=calm): 162 / 1993 windows kept
+21:03:35 | INFO    | train_LSTM_regime | RegimeWindowDataset(regime=calm): 24 / 1048 windows kept
+21:03:36 | INFO    | train_LSTM_regime | RegimeWindowDataset(regime=calm): 162 / 1993 windows kept
+21:03:36 | INFO    | train_LSTM_regime | RegimeWindowDataset(regime=calm): 24 / 1048 windows kept
+21:03:38 | INFO    | train_LSTM_regime | RegimeWindowDataset(regime=calm): 162 / 1993 windows kept
+21:03:38 | INFO    | train_LSTM_regime | RegimeWindowDataset(regime=calm): 24 / 1048 windows kept
+21:03:39 | INFO    | train_LSTM_regime | RegimeWindowDataset(regime=calm): 162 / 1993 windows kept
+21:03:39 | INFO    | train_LSTM_regime | RegimeWindowDataset(regime=calm): 24 / 1048 windows kept
+21:03:41 | INFO    | train_LSTM_regime | RegimeWindowDataset(regime=calm): 162 / 1993 windows kept
+21:03:41 | INFO    | train_LSTM_regime | RegimeWindowDataset(regime=calm): 24 / 1048 windows kept
+21:03:43 | INFO    | train_LSTM_regime | RegimeWindowDataset(regime=calm): 162 / 1993 windows kept
+21:03:43 | INFO    | train_LSTM_regime | RegimeWindowDataset(regime=calm): 24 / 1048 windows kept
+21:03:45 | INFO    | train_LSTM_regime | RegimeWindowDataset(regime=calm): 162 / 1993 windows kept
+21:03:45 | INFO    | train_LSTM_regime | RegimeWindowDataset(regime=calm): 24 / 1048 windows kept
+21:03:47 | INFO    | train_LSTM_regime | RegimeWindowDataset(regime=calm): 162 / 1993 windows kept
+21:03:47 | INFO    | train_LSTM_regime | RegimeWindowDataset(regime=calm): 24 / 1048 windows kept
+21:03:49 | INFO    | train_LSTM_regime | [volatile] Best val MSE (raw scale): 0.00001347 | params: {'hidden_size': 32, 'n_layers': 3, 'dropout': 0.48515987980682024, 'lr': 0.0033287008061135604, 'batch_size': 128, 'seq_len': 42}
+21:03:49 | INFO    | train_LSTM_regime | RegimeWindowDataset(regime=calm): 162 / 1993 windows kept
+21:03:49 | INFO    | train_LSTM_regime | RegimeWindowDataset(regime=calm): 24 / 1048 windows kept
+21:03:49 | INFO    | train_LSTM_regime | [volatile] Final retrain — using regime-filtered val loader (24 windows).
+21:03:49 | INFO    | train_LSTM_baseline | epoch   1 | train_log_mse=13.384594 | val_mse_raw=0.60502368 | best=0.60502368
+21:03:49 | INFO    | train_LSTM_baseline | epoch   2 | train_log_mse=12.497584 | val_mse_raw=0.42753568 | best=0.42753568
+21:03:49 | INFO    | train_LSTM_baseline | epoch   3 | train_log_mse=11.376055 | val_mse_raw=0.22732043 | best=0.22732043
+21:03:50 | INFO    | train_LSTM_baseline | epoch   4 | train_log_mse=9.473089 | val_mse_raw=0.07916853 | best=0.07916853
+21:03:50 | INFO    | train_LSTM_baseline | epoch   5 | train_log_mse=6.854124 | val_mse_raw=0.02563146 | best=0.02563146
+21:03:50 | INFO    | train_LSTM_baseline | epoch   6 | train_log_mse=4.337527 | val_mse_raw=0.00969867 | best=0.00969867
+21:03:50 | INFO    | train_LSTM_baseline | epoch   7 | train_log_mse=2.745810 | val_mse_raw=0.00377581 | best=0.00377581
+21:03:50 | INFO    | train_LSTM_baseline | epoch   8 | train_log_mse=1.651811 | val_mse_raw=0.00138814 | best=0.00138814
+21:03:50 | INFO    | train_LSTM_baseline | epoch   9 | train_log_mse=0.861583 | val_mse_raw=0.00045999 | best=0.00045999
+21:03:50 | INFO    | train_LSTM_baseline | epoch  10 | train_log_mse=0.399206 | val_mse_raw=0.00012860 | best=0.00012860
+21:03:50 | INFO    | train_LSTM_baseline | epoch  11 | train_log_mse=0.173332 | val_mse_raw=0.00003028 | best=0.00003028
+21:03:50 | INFO    | train_LSTM_baseline | epoch  12 | train_log_mse=0.119191 | val_mse_raw=0.00001350 | best=0.00001350
+21:03:50 | INFO    | train_LSTM_baseline | epoch  13 | train_log_mse=0.169605 | val_mse_raw=0.00001815 | best=0.00001350
+21:03:50 | INFO    | train_LSTM_baseline | epoch  14 | train_log_mse=0.247077 | val_mse_raw=0.00002381 | best=0.00001350
+21:03:50 | INFO    | train_LSTM_baseline | epoch  15 | train_log_mse=0.307132 | val_mse_raw=0.00002555 | best=0.00001350
+21:03:50 | INFO    | train_LSTM_baseline | epoch  16 | train_log_mse=0.319208 | val_mse_raw=0.00002340 | best=0.00001350
+21:03:50 | INFO    | train_LSTM_baseline | epoch  17 | train_log_mse=0.300381 | val_mse_raw=0.00001911 | best=0.00001350
+21:03:50 | INFO    | train_LSTM_baseline | epoch  18 | train_log_mse=0.254808 | val_mse_raw=0.00001512 | best=0.00001350
+21:03:50 | INFO    | train_LSTM_baseline | epoch  19 | train_log_mse=0.205891 | val_mse_raw=0.00001347 | best=0.00001347
+21:03:50 | INFO    | train_LSTM_baseline | epoch  20 | train_log_mse=0.170316 | val_mse_raw=0.00001571 | best=0.00001347
+21:03:51 | INFO    | train_LSTM_baseline | epoch  21 | train_log_mse=0.136669 | val_mse_raw=0.00002249 | best=0.00001347
+21:03:51 | INFO    | train_LSTM_baseline | epoch  22 | train_log_mse=0.122664 | val_mse_raw=0.00003323 | best=0.00001347
+21:03:51 | INFO    | train_LSTM_baseline | epoch  23 | train_log_mse=0.117908 | val_mse_raw=0.00004585 | best=0.00001347
+21:03:51 | INFO    | train_LSTM_baseline | epoch  24 | train_log_mse=0.113709 | val_mse_raw=0.00005760 | best=0.00001347
+21:03:51 | INFO    | train_LSTM_baseline | epoch  25 | train_log_mse=0.123404 | val_mse_raw=0.00006679 | best=0.00001347
+21:03:51 | INFO    | train_LSTM_baseline | epoch  26 | train_log_mse=0.127356 | val_mse_raw=0.00007203 | best=0.00001347
+21:03:51 | INFO    | train_LSTM_baseline | epoch  27 | train_log_mse=0.129873 | val_mse_raw=0.00007298 | best=0.00001347
+21:03:51 | INFO    | train_LSTM_baseline | epoch  28 | train_log_mse=0.127008 | val_mse_raw=0.00007062 | best=0.00001347
+21:03:51 | INFO    | train_LSTM_baseline | epoch  29 | train_log_mse=0.130233 | val_mse_raw=0.00006595 | best=0.00001347
+21:03:51 | INFO    | train_LSTM_baseline | Early stopping at epoch 29
+21:03:51 | INFO    | train_LSTM_regime | [volatile] Final retrain — best val MSE (raw): 0.00001347
+21:03:51 | INFO    | train_LSTM_regime | [volatile] Test metrics: {'MSE': 9.255912300432101e-05, 'RMSE': 0.00962076522409916, 'MAE': 0.00898401066660881, 'n_test_windows': 1440}
+21:03:51 | INFO    | train_LSTM_regime | [volatile] Saved model → /Users/zaidt/Desktop/cpsc440/StockVolatilitySight/models/lstm_volatile_B.pt
+21:03:51 | INFO    | train_LSTM_regime | [volatile] Saved scaler → /Users/zaidt/Desktop/cpsc440/StockVolatilitySight/models/lstm_volatile_B_scaler.joblib
+
+=== Regime-Specific LSTM Results ===
+{
+  "calm": {
+    "regime": "calm",
+    "best_params": {
+      "hidden_size": 128,
+      "n_layers": 1,
+      "dropout": 0.19584403787563986,
+      "lr": 0.00323067461734994,
+      "batch_size": 64,
+      "seq_len": 21
+    },
+    "best_val_mse_raw": 3.807658504229039e-05,
+    "retrained_val_mse": 3.807658504229039e-05,
+    "test_metrics": {
+      "MSE": 1.4159288184600882e-05,
+      "RMSE": 0.003762882901355624,
+      "MAE": 0.0024552461691200733,
+      "n_test_windows": 1461
+    },
+    "features": [
+      "log_return",
+      "abs_return",
+      "oc_return",
+      "intraday_range",
+      "relative_volume_21d",
+      "vix",
+      "vix_log_change",
+      "vix3m_minus_vix"
+    ],
+    "target": "realized_vol_21d",
+    "n_trials": 20,
+    "n_train_windows": 1879,
+    "n_val_windows": 1044
+  },
+  "volatile": {
+    "regime": "volatile",
+    "best_params": {
+      "hidden_size": 32,
+      "n_layers": 3,
+      "dropout": 0.48515987980682024,
+      "lr": 0.0033287008061135604,
+      "batch_size": 128,
+      "seq_len": 42
+    },
+    "best_val_mse_raw": 1.3465075426211115e-05,
+    "retrained_val_mse": 1.3465075426211115e-05,
+    "test_metrics": {
+      "MSE": 9.255912300432101e-05,
+      "RMSE": 0.00962076522409916,
+      "MAE": 0.00898401066660881,
+      "n_test_windows": 1440
+    },
+    "features": [
+      "log_return",
+      "abs_return",
+      "oc_return",
+      "intraday_range",
+      "relative_volume_21d",
+      "vix",
+      "vix_log_change",
+      "vix3m_minus_vix"
+    ],
+    "target": "realized_vol_21d",
+    "n_trials": 20,
+    "n_train_windows": 155,
+    "n_val_windows": 45
+  }
+}

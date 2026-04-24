@@ -1,0 +1,37 @@
+22:20:42 | INFO    | ensemble | Loading required data splits (variant suffix='<none>')...
+22:20:42 | INFO    | ensemble | Extracting aligned predictions for all LSTMs...
+22:20:42 | INFO    | ensemble | Loading model 'baseline'...
+22:20:42 | INFO    | ensemble | Loading model 'calm'...
+22:20:43 | INFO    | ensemble | Loading model 'volatile'...
+22:20:43 | INFO    | ensemble | Saved ensemble predictions to /Users/zaidt/Desktop/cpsc440/StockVolatilitySight/data/processed/test_predictions.parquet
+
+==================================================
+PHASE 4: ENSEMBLE EVALUATION (TEST SET)
+==================================================
+Test period: 2020-06-30 to 2026-03-24
+Test size:   1440 trading days
+--------------------------------------------------
+Model: BASELINE
+  MSE:  0.000017
+  RMSE: 0.0041
+  MAE:  0.0027
+  MAPE: 26.29%
+--------------------------------------------------
+Model: CALM
+  MSE:  0.000014
+  RMSE: 0.0038
+  MAE:  0.0025
+  MAPE: 24.58%
+--------------------------------------------------
+Model: VOLATILE
+  MSE:  0.000088
+  RMSE: 0.0094
+  MAE:  0.0088
+  MAPE: 121.68%
+--------------------------------------------------
+Model: ENSEMBLE
+  MSE:  0.000014
+  RMSE: 0.0038
+  MAE:  0.0025
+  MAPE: 24.69%
+--------------------------------------------------
