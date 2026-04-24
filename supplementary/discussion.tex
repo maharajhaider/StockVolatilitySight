@@ -1,0 +1,376 @@
+\documentclass[11pt]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[margin=1in]{geometry}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\usepackage{xcolor}
+\usepackage{parskip}
+
+\title{Discussion Log \\[0.3em] \large StockVolatilitySight --- CPSC 440}
+\author{}
+\date{}
+
+\begin{document}
+\maketitle
+
+Running record of important decisions, divergences from the proposal, and rationale. Keep entries concise and focused --- this is a working document for the team, not a plan artifact.
+
+\paragraph{Conventions.}
+\begin{itemize}[leftmargin=*]
+  \item The proposal (\texttt{plan/Research 440 Proposal.md}) frames the research question and is the source of truth for \emph{intent}.
+  \item The plan doc (\texttt{plan/hmm-lstm\_volatility\_forecast\_11d292d8.plan.md}) is a hypothesis / implementation log. Empirical results can and do diverge from what the plan predicted --- that's the research finding, not a bug. Log divergences here with neutral framing.
+  \item When implementation diverges from the \emph{proposal}, log it here with a rationale.
+\end{itemize}
+
+\hrulefill
+
+\section*{Current State (updated 2026-04-23, post-rerun)}
+
+\paragraph{Pipeline status.} Phases 1--6 of the plan are complete. Full pipeline re-run from a fresh clone today (nb 01 $\to$ 04 $\to$ 05 $\to$ \texttt{src/ensemble.py} $\to$ nb 06). HMM selected (GMMHMM, 2 states, 2 mixture components, full covariance). All three LSTMs trained. Ensemble evaluated on 2020-06-30 $\to$ 2026-03-16 ($n=1{,}434$).
+
+\paragraph{Headline empirical result (fresh run, \texttt{notebooks/06\_ensemble\_eval.ipynb}):}
+
+\begin{center}
+\begin{tabular}{lrrr}
+\toprule
+Model & MSE & MAPE & Prior-run MSE \\
+\midrule
+Naive (\texttt{rolling\_std\_21}) & 2.2e-5 & 34.6\% & 2.2e-5 \\
+\textbf{Baseline LSTM}            & \textbf{1.6e-5} & \textbf{25.1\%} & 1.5e-5 \\
+Calm LSTM                         & 4.1e-5 & 34.9\% & 2.0e-5 \\
+Volatile LSTM                     & 8.5e-5 & 119.4\% & 8.5e-5 \\
+Ensemble                          & 2.6e-5 & 31.9\% & 1.7e-5 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\paragraph{Diebold--Mariano significance tests} (nb 06 \S6, first time actually executed):
+
+\begin{center}
+\renewcommand{\arraystretch}{1.1}
+\begin{tabular}{@{}lllrrl@{}}
+\toprule
+Comparison & Loss & DM & $p$ & Verdict ($\alpha=.05$) \\
+\midrule
+Naive vs Baseline (full)               & MSE & $+1.36$ & 0.173 & tie \\
+Naive vs Baseline (full)               & MAE & $+2.46$ & 0.014 & \textbf{Baseline wins} \\
+Baseline vs Ensemble (full)            & MSE & $-1.75$ & 0.080 & tie (marginal, $\alpha=.10$) \\
+Baseline vs Ensemble (full)            & MAE & $-2.00$ & 0.046 & \textbf{Baseline wins} \\
+Baseline vs Ensemble (volatile, $n=27$)& MSE & $+0.62$ & 0.542 & tie \\
+Baseline vs Ensemble (volatile, $n=27$)& MAE & $+0.22$ & 0.831 & tie \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+On aggregate the baseline LSTM beats the HMM-LSTM ensemble --- significantly on MAE ($p=0.046$), marginally on MSE ($p=0.080$). On the 27 strictly-volatile test days the ensemble is \emph{directionally} better (MSE 5e-5 vs 8e-5) but the sample is too small to reject ($p > 0.5$). Regime separation helps where it should; the calm regime dominates aggregate metrics.
+
+\paragraph{Training stochasticity concern.} This run's ensemble MSE is 2.6e-5 vs the 1.7e-5 in the previously-saved notebook output --- a $\sim$50\% difference from the same config, with different Optuna/PyTorch numerical noise. The calm LSTM doubled its MSE (4.1e-5 vs 2.0e-5). \textbf{Single-seed results are not reliable for ranking claims} --- before locking in any narrative we should run $k$ seeds and report mean$\pm$std.
+
+\paragraph{Known reproducibility gaps (four now).}
+\begin{itemize}[leftmargin=*]
+  \item \texttt{data/processed/train|val|test.parquet} predate the Phase-6 addition of \texttt{relative\_volume\_21d}. Cloning and running nb 04 directly $\to$ \texttt{KeyError}. Fix: re-run nb 01 (which calls \texttt{features.build\_features} and saves with the column).
+  \item \textbf{\texttt{src/ensemble.py} is an undocumented step between nb 05 and nb 06.} Nb 06 cell 4 reads \texttt{data/processed/test\_predictions.parquet}, which \texttt{ensemble.py} produces. Neither the README nor the notebooks call this out. The nb 05 $\to$ nb 06 chain fails with \texttt{FileNotFoundError} without this step. Discovered today when running end-to-end.
+  \item \texttt{data/processed/test\_predictions.parquet} is not tracked (produced by the step above).
+  \item LSTM checkpoints (\texttt{models/*.pt}) are gitignored.
+\end{itemize}
+
+\paragraph{Open items to decide.}
+\begin{enumerate}[leftmargin=*]
+  \item Is the aggregate-loss / volatile-day-win tradeoff acceptable for the writeup, or do we want to revisit gating? (Proposal explicitly listed a learned gating network as out of scope.)
+  \item Volatile LSTM outputs ${\sim}0.0175$ nearly constantly and pulls the ensemble up on calm days --- does this need a fix (clipping, higher gating threshold) or is it part of the finding?
+  \item \texttt{config.VAL\_END = "2020-04-30"} means val now includes COVID. The plan text still says ``2016--2019.'' Decide whether to update the plan text or realign the config.
+  \item \textbf{Multi-seed robustness study.} Re-run LSTM training under $k \geq 5$ random seeds to get mean$\pm$std of the metrics. The current single-run swing from ensemble-MSE 1.7e-5 to 2.6e-5 means any ``baseline beats ensemble'' claim is fragile.
+  \item Document the nb 05 $\to$ \texttt{ensemble.py} $\to$ nb 06 step in \texttt{README.md} (or bundle \texttt{ensemble.py} invocation into nb 06's setup cell).
+\end{enumerate}
+
+\hrulefill
+
+\section*{2026-04-23 --- Plan summary and proposal/plan discrepancies}
+
+\subsection*{Plan summary}
+
+Regime-aware hybrid model for 21-day forward realized volatility on SPY:
+
+\begin{enumerate}[leftmargin=*]
+  \item \textbf{Data + features:} OHLCV + put/call + AAII sentiment $\to$ log returns, abs returns, ranges, rolling stats; chronological split; normality diagnostics to justify HMM choice.
+  \item \textbf{HMM regime detection:} Gaussian vs GMM-HMM, 1st- vs 2nd-order (via augmented state space), BIC/LL comparison, Viterbi sanity check against 2008/2020/2022 crises.
+  \item \textbf{LSTMs:} baseline (full data) + calm + volatile, PyTorch CPU, log-target with MSE, Optuna TPE tuning.
+  \item \textbf{Ensemble:} $y = P(\text{calm} \mid O) \cdot y_{\text{calm}} + P(\text{volatile} \mid O) \cdot y_{\text{volatile}}$.
+  \item \textbf{Evaluation:} MSE/RMSE/MAE vs baseline LSTM on 2020-present.
+\end{enumerate}
+
+\textbf{Plan-era result (pre-Phase-6):} ensemble MSE 0.00167 vs baseline 0.00246 on the 2020-present holdout --- the regime-split hypothesis was initially validated. See ``Current State'' above for the post-Phase-6 empirical update.
+
+\subsection*{Discrepancies between proposal and plan}
+
+\begin{center}
+\renewcommand{\arraystretch}{1.15}
+\begin{tabular}{@{}c p{3.4cm} p{4.4cm} p{5.8cm}@{}}
+\toprule
+\# & Proposal says & Plan / code does & Rationale \\
+\midrule
+1 & Targets SPY, XEQT, and MAG7 individual stocks & SPY only & XEQT has insufficient history; MAG7 dropped from scope. Documented in plan. \\
+2 & Train 2005--2015, Val 2015--2020, Test remaining & Train 2004--2015, Val 2016--2019, Test 2020-present & Not explicitly rationalized in plan (git log shows a revert on the split). Non-overlapping boundaries are cleaner but the drift from the proposal is undocumented. \textbf{Open item.} \\
+3 & Inputs include raw OHLCV & Phase 6 removed raw OHLCV; kept \texttt{log\_return}, \texttt{abs\_return}, \texttt{oc\_return}, \texttt{intraday\_range}, \texttt{relative\_volume\_21d} & Raw prices caused non-stationary drift in predictions; stationarity fix dropped MAPE from ${\sim}600$\% to ${\sim}25$\%. Tried, didn't work --- legitimate divergence. \\
+4 & Compare Gaussian vs GMM-HMM; explore higher-order Markov ``if time permits'' & Both done (GMM-HMM and 2nd-order via augmented state space) & No discrepancy. \\
+5 & Reference baselines: baseline LSTM + ``considering'' a simple tree/NN & Baseline LSTM + na\"ive \texttt{rolling\_std\_21} (no tree model) & Plan picked a different simple baseline. Proposal's tree regressor was never implemented. \\
+6 & Regime-specific LSTMs train on regime-partitioned data & Volatile-LSTM val fallback: 0 volatile-dominant windows in 2016--2019, so early-stopping uses the unfiltered val set & Practical necessity --- the 2016--2019 val window is almost entirely calm. Methodological caveat: volatile LSTM's model selection isn't purely regime-matched. \\
+7 & Learned gating network --- considered, out of scope & Out of scope & No discrepancy. \\
+8 & Non-price inputs: put/call volume (Ho et al., 2012) and AAII weekly sentiment (Gupta et al., 2023) as key features & \textbf{Scaffolded but inert.} \texttt{SENTIMENT\_FEATURES} + \texttt{PUTCALL\_FEATURES} defined in \texttt{config.py} since commit 888a861 (2026-04-16), loaders exist in \texttt{src/data\_loader.py}, but the CSVs were never downloaded to \texttt{data/raw/} and neither group is referenced by \texttt{HMM\_FEATURES} or \texttt{LSTM\_BASELINE\_FEATURES}. Verified via git log: never added to the active feature lists, never removed --- just never activated. & HMM + LSTMs train on price/volume only. Significant divergence from the proposal's core ``non-price inputs matter for vol'' thesis. Options for the paper: (a) download the CSVs and retrain to restore proposal alignment; (b) explicitly note the scope-down in methods + limitations. \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{Most consequential to flag in the writeup:} \#1 (scope narrowing to SPY), \#3 (stationarity-driven feature change), \#6 (volatile-LSTM val fallback), \textbf{\#8 (sentiment + put/call never wired in --- materially weakens the ``non-price signals matter'' thesis)}. \#2 is the open item --- worth deciding whether to retro-justify or realign.
+
+\hrulefill
+
+\section*{2026-04-23 --- Repo survey: code, notebooks, data sanity}
+
+\subsection*{Data we have}
+
+Checked-in processed data (\texttt{data/processed/}):
+
+\begin{itemize}[leftmargin=*]
+  \item \texttt{features\_all.parquet} --- full feature table, 5{,}584 rows, 2004-01-05 $\to$ 2026-03-16.
+  \item \texttt{train.parquet} (3{,}020 rows, 2004-01-05 $\to$ 2015-12-31), \texttt{val.parquet} (1{,}089 rows, 2016-01-04 $\to$ 2020-04-30), \texttt{test.parquet} (1{,}475 rows, 2020-05-01 $\to$ 2026-03-16).
+  \item \texttt{regime\_probabilities.parquet} --- HMM soft probs + Viterbi labels, 5{,}564 rows. Overall regime mix: 96.3\% calm, 3.7\% volatile (matches plan).
+\end{itemize}
+
+Columns present in train/val/test (20): \texttt{Open}, \texttt{High}, \texttt{Low}, \texttt{Close}, \texttt{Volume}, \texttt{log\_return}, \texttt{abs\_return}, \texttt{oc\_return}, \texttt{intraday\_range}, \texttt{log\_volume}, \texttt{rolling\_mean\_\{5,10,21\}}, \texttt{rolling\_std\_\{5,10,21\}}, \texttt{rolling\_abs\_mean\_\{5,10,21\}}, \texttt{realized\_vol\_21d}.
+
+Sanity spot-checks on train pass: \texttt{log\_return} mean ${\approx}\,0.0004$, std ${\approx}\,0.012$ (\checkmark\ daily SPY scale); \texttt{log\_volume} $\in [16.5, 20.6]$ (\checkmark\ log of millions); target \texttt{realized\_vol\_21d} positive, same scale as \texttt{rolling\_std\_21}; no NaNs after rolling warmup. Target formula in \texttt{features.py:154} correctly implements the proposal: forward-looking, demeaned, window $=21$ ---
+\[
+\sigma_t \;=\; \sqrt{\frac{1}{m}\sum_{j=1}^{m} (r_{t+j} - \bar{r})^2}, \qquad m=21.
+\]
+
+\subsection*{Code layout}
+
+\texttt{src/} holds all modules (not \texttt{models/}, which only holds serialized \texttt{.joblib} artifacts). Key files:
+
+\begin{itemize}[leftmargin=*]
+  \item \texttt{features.py} --- engineers all features and target; matches proposal math.
+  \item \texttt{hmm\_model.py} --- Gaussian vs GMM-HMM comparison, penalised EM with restarts, 1st- vs 2nd-order via state-space augmentation.
+  \item \texttt{lstm\_model.py} --- stacked LSTM + linear head, sliding-window \texttt{Dataset}, log-space prediction.
+  \item \texttt{train\_LSTM\_baseline.py}, \texttt{train\_LSTM\_regime.py} --- Optuna TPE tuning $\to$ final retrain.
+  \item \texttt{ensemble.py} --- weighted-sum ensemble keyed on HMM soft probs.
+  \item \texttt{config.py} --- single source of truth for features, splits, HMM/LSTM search spaces.
+\end{itemize}
+
+HMM artifacts in \texttt{models/}: \texttt{hmm\_winner.joblib} $=$ GMMHMM(states=2, n\_mix=2, cov=full), val LL $= 9057.28$, BIC $= -15925.74$. Volatile state is state 1. \texttt{HMM\_DURATION\_PENALTY=3000} (approximately the number of training observations) prevents degenerate rapid-switching during EM restarts.
+
+\subsection*{Current test-set results}
+
+From \texttt{notebooks/06\_ensemble\_eval.ipynb}, 2020-06-30 $\to$ 2026-03-16, $n=1{,}434$.
+
+\begin{center}
+\begin{tabular}{lrrrr}
+\toprule
+Model & MSE & RMSE & MAE & MAPE \\
+\midrule
+Naive (\texttt{rolling\_std\_21}) & 0.000022 & 0.00470 & 0.00313 & 34.6\% \\
+\textbf{Baseline LSTM}            & \textbf{0.000015} & \textbf{0.00390} & \textbf{0.00246} & \textbf{25.3\%} \\
+Calm LSTM                         & 0.000020 & 0.00442 & 0.00279 & 29.5\% \\
+Volatile LSTM                     & 0.000085 & 0.00922 & 0.00857 & 119.4\% \\
+Ensemble                          & 0.000017 & 0.00415 & 0.00271 & 28.8\% \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Regime-stratified (HMM confidence $> 0.8$): on strictly-calm days ($n=1{,}407$) baseline wins (MSE 1e-5 vs 2e-5); on strictly-volatile days ($n=27$) \textbf{ensemble wins} (MSE 5e-5 vs 1e-4).
+
+\subsection*{Findings worth flagging}
+
+\begin{enumerate}[leftmargin=*]
+  \item \textbf{Empirical ordering differs from the plan's hypothesis.} The plan doc anticipated ensemble $>$ baseline (MSE 0.00167 vs 0.00246, pre-Phase-6). Current post-Phase-6 notebook-06 output shows baseline (1.5e-5) slightly ahead of ensemble (1.7e-5) on aggregate --- but ensemble beats baseline on strictly-volatile days ($n=27$, MSE 5e-5 vs 1e-4). Not a failure: the plan is a hypothesis doc, and this \emph{is} the research result. Worth framing clearly in the writeup as ``regime separation helps on volatile regimes specifically; the calm regime dominates 2020--2026 so the baseline is hard to beat on aggregate.''
+
+  \item \textbf{Volatile LSTM is overpredicting on calm days.} Its test MAPE is 119\% --- when the HMM is wrong about the regime (or uncertain), the volatile model's near-constant high output (${\sim}0.0175$) pulls the ensemble up. Options: (a) clip volatile predictions when \texttt{p\_volatile} is small, (b) use a higher gating threshold, (c) revisit the learned-gating-network idea that the proposal put out of scope.
+
+  \item \textbf{Val split now goes to 2020-04-30, not 2019-12-31.} \texttt{config.VAL\_END = "2020-04-30"} --- val \emph{includes} the COVID crash. The plan text and plan table both say ``2016--2019'' val. This change means the volatile-LSTM val-fallback issue (plan Phase 3b) may no longer apply, since COVID gives the val set ${\sim}2$ months of volatile-dominant windows. \textbf{Discrepancy vs plan and vs the \#2 item in the earlier discrepancy table.} The config comment on line 22 is also wrong (says test is ``2020-01-01 $\to$ present'' but test actually starts 2020-05-01).
+
+  \item \textbf{Saved parquets are stale vs the code.} \texttt{config.LSTM\_BASELINE\_FEATURES} requires \texttt{relative\_volume\_21d}, and \texttt{features.build\_features} computes it (line 298), but the checked-in \texttt{train/val/test.parquet} files do not contain the column. Re-running notebook 01 would fix it; trying to retrain LSTMs against the committed data will \texttt{KeyError}. Also, \texttt{data/processed/test\_predictions.parquet} (which notebook 06 loads in cell 4) is not in the tree --- results only reproducible from a full local regeneration.
+
+  \item \textbf{LSTM checkpoints are intentionally not tracked.} \texttt{.gitignore} excludes \texttt{models/*.pt}, \texttt{models/*.pth}. This is a choice (size), but combined with (4) it means a fresh clone can't reproduce the ensemble without re-running notebooks 01, 03, 04, 05, 06 in order. Worth a note in the README if we care about reproducibility for the graders.
+
+  \item \textbf{Raw OHLCV still lives in the parquets.} Phase 6 removed them from \texttt{LSTM\_BASELINE\_FEATURES}, but the columns remain in the DataFrames (just unused). Not a bug --- feature selection happens at the config level --- but worth knowing if anyone's debugging feature plumbing.
+\end{enumerate}
+
+\hrulefill
+
+\section*{2026-04-23 (later) --- Added Diebold--Mariano forecast significance testing}
+
+\subsection*{What prompted this}
+
+In discussion of the metrics table, two methodological concerns surfaced:
+
+\begin{enumerate}[leftmargin=*]
+  \item \textbf{Raw MSE is scale-misleading at this target scale.} Realized volatility sits in the 0.005--0.05 range, so MSE is necessarily tiny. Reporting ``Baseline beats Naive by 32\% MSE'' (2.2e-5 $\to$ 1.5e-5) made the gap sound dramatic, but the absolute numbers convey little about practical significance. MAPE (34.6\% $\to$ 25.3\%, a 9.3pp absolute reduction in relative error) and RMSE (0.00470 $\to$ 0.00390, ${\sim}17$\% lower) are more interpretable --- each forecast is off by roughly a quarter of the true vol, not a 30th of anything.
+
+  \item \textbf{All rankings were point estimates.} We had not formally tested equal predictive accuracy, so we couldn't distinguish ``genuinely more accurate'' from ``slightly lower empirical loss on this sample.'' This matters most for the headline \textbf{Baseline vs Ensemble} comparison, where the RMSE gap is only ${\sim}6$\% (0.00390 vs 0.00415) --- well within the range where stochastic variation could flip the ordering.
+\end{enumerate}
+
+The second point is a legitimate weakness in the current writeup: we were making ranking claims without showing they were significant.
+
+\subsection*{What was added}
+
+\texttt{notebooks/06\_ensemble\_eval.ipynb} --- new \textbf{Section 6} (cells 14--17):
+
+\begin{itemize}[leftmargin=*]
+  \item \texttt{diebold\_mariano()} helper implementing the Diebold--Mariano (1995) test with the Harvey--Leybourne--Newbold (1997) small-sample correction. Newey--West HAC variance with Bartlett kernel, lag $= h - 1 = 20$ to account for autocorrelation from our overlapping 21-day targets. Supports MSE, MAE, and MAPE loss.
+  \item Three comparisons, each run with both MSE and MAE loss for robustness:
+  \begin{enumerate}
+    \item \textbf{Naive vs Baseline LSTM} --- sanity floor.
+    \item \textbf{Baseline vs Ensemble} (full test, $n=1{,}434$) --- primary research question.
+    \item \textbf{Baseline vs Ensemble} on strictly-volatile days (\texttt{p\_volatile} $> 0.8$, $n=27$) --- the regime where the ensemble is supposed to help.
+  \end{enumerate}
+  \item A formatted results table with DM statistic, $p$-value, significance code, and $\alpha=0.05$ verdict.
+  \item Interpretation notes clarifying that the strictly-volatile comparison is severely underpowered and should be read as directional evidence only.
+\end{itemize}
+
+\subsection*{Status: pending execution}
+
+\texttt{data/processed/test\_predictions.parquet} and the \texttt{models/*.pt} LSTM checkpoints are not tracked (see ``Known reproducibility gaps''), so the DM cells cannot run on the current fresh checkout. The code is in place and will execute on the next full regeneration of notebooks 01 $\to$ 06.
+
+\subsection*{Priors --- what we expect when it runs}
+
+\begin{center}
+\renewcommand{\arraystretch}{1.15}
+\begin{tabular}{@{}p{4.8cm} p{4cm} p{5.8cm}@{}}
+\toprule
+Test & Prior & Reasoning \\
+\midrule
+Naive vs Baseline (full)            & Strongly reject ($p < 0.01$) & RMSE gap ${\sim}17$\% with $n=1{,}434$ --- ample power \\
+Baseline vs Ensemble (full)         & Ambiguous                     & Gap only ${\sim}6$\% RMSE; plausibly within noise \\
+Baseline vs Ensemble (volatile)     & Likely fail to reject         & $n=27$ is too small to reject despite large point-estimate gap (ensemble halves MSE) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection*{Why this matters for the paper}
+
+DM results let us calibrate our claims:
+
+\begin{itemize}[leftmargin=*]
+  \item If \textbf{naive vs baseline} rejects $\to$ ``the deep model learns structure beyond persistence.'' \checkmark\ clean claim.
+  \item If \textbf{baseline vs ensemble (full)} does \emph{not} reject $\to$ reframe headline from ``baseline slightly beats ensemble'' to \textbf{``baseline and ensemble are statistically tied on aggregate, and ensemble is directionally better on volatile-dominant days.''} This is both more honest and a stronger-feeling paper than claiming the ensemble lost.
+  \item If \textbf{baseline vs ensemble (volatile)} does \emph{not} reject $\to$ we cannot make a significance claim on the volatile subset. Report as directional evidence plus an explicit note on low power, and suggest larger/longer test windows (extend the test period before 2020 or include additional crisis periods) as future work.
+\end{itemize}
+
+\subsection*{Weakness surfaced (for the paper's limitations section)}
+
+Until this point we were reporting model rankings without testing them. Identified during review; now remedied for the aggregate and volatile comparisons. A remaining weakness is test-set power for regime-conditional claims: the 2020-06-30 $\to$ 2026-03-16 window contains only 27 days meeting \texttt{p\_volatile} $> 0.8$, which is insufficient to detect anything short of huge effects. This is a structural limitation of using SPY (calm-dominated) on a post-COVID test window rather than a flaw in the model.
+
+\hrulefill
+
+\section*{2026-04-23 (evening) --- Pipeline re-run from fresh clone; DM results executed}
+
+\subsection*{Motivation}
+
+Imported the repo fresh and attempted to reproduce the pipeline end-to-end. Two things we wanted: (1) confirm the reproducibility gaps we'd identified were real, (2) actually produce \texttt{test\_predictions.parquet} so the Diebold--Mariano cells added earlier today could run.
+
+\subsection*{Reproducibility issues found (in the order we hit them)}
+
+\begin{enumerate}[leftmargin=*]
+  \item \textbf{\texttt{relative\_volume\_21d} missing from committed parquets} --- \texttt{train\_LSTM\_baseline.py} failed immediately with \texttt{KeyError: "Columns missing from dataframe: ['relative\_volume\_21d']"}. Fix: re-run nb 01. Verified this is a pre-existing gap (git status confirmed we hadn't touched \texttt{config.py}, \texttt{src/}, or \texttt{data/processed/}). Same failure any teammate would hit from a fresh clone.
+
+  \item \textbf{\texttt{src/ensemble.py} step is undocumented} --- after nb 04 + nb 05 produced the three LSTM \texttt{.pt} files, nb 06 failed with \texttt{FileNotFoundError: data/processed/test\_predictions.parquet}. This file is produced by running \texttt{python src/ensemble.py} as an intermediate step. The README lists only notebooks; neither nb 05 nor nb 06 mentions that an external script must run between them. Fix: explicitly document the step in README, or bundle the invocation into nb 06's setup cell.
+
+  \item \textbf{Package install was ad-hoc.} I installed \texttt{optuna}, \texttt{seaborn}, \texttt{yfinance} piecemeal as errors hit, instead of \texttt{pip install -r requirements.txt} up front. Lesson for the log: start with the README's setup block.
+\end{enumerate}
+
+\subsection*{Fresh-run metrics ($n=1{,}434$, test window 2020-06-30 $\to$ 2026-03-16)}
+
+\begin{center}
+\begin{tabular}{lrrrr}
+\toprule
+Model & MSE & RMSE & MAE & MAPE \\
+\midrule
+Naive (\texttt{rolling\_std\_21}) & 0.000022 & 0.00470 & 0.00313 & 34.6\% \\
+\textbf{Baseline LSTM}            & \textbf{0.000016} & \textbf{0.00398} & \textbf{0.00257} & \textbf{25.1\%} \\
+Calm LSTM                         & 0.000041 & 0.00638 & 0.00343 & 34.9\% \\
+Volatile LSTM                     & 0.000085 & 0.00922 & 0.00857 & 119.4\% \\
+Ensemble                          & 0.000026 & 0.00511 & 0.00310 & 31.9\% \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Regime-stratified ($p > 0.8$): strictly-calm $n=1{,}407$ --- Baseline MSE 0.00001, Ensemble MSE 0.00003 (baseline wins). Strictly-volatile $n=27$ --- Baseline MSE 0.00008, Ensemble MSE 0.00005 (ensemble wins directionally).
+
+\subsection*{Diebold--Mariano results}
+
+Sign convention: positive DM statistic means the first-listed model has higher loss (so the second-listed model is more accurate). Newey--West HAC with Bartlett kernel, lag 20; HLN small-sample correction; two-sided $t$-test with df $= n-1$.
+
+\begin{center}
+\renewcommand{\arraystretch}{1.1}
+\begin{tabular}{@{}p{4cm}p{3cm}llll@{}}
+\toprule
+Comparison & Scope & Loss & DM & $p$ & Verdict ($\alpha=.05$) \\
+\midrule
+Naive vs Baseline    & full $n=1{,}434$          & MSE & $+1.36$ & 0.173 & tie \\
+Naive vs Baseline    & full $n=1{,}434$          & MAE & $+2.46$ & 0.014 & \textbf{Baseline wins} \\
+Baseline vs Ensemble & full $n=1{,}434$          & MSE & $-1.75$ & 0.080 & tie (marginal) \\
+Baseline vs Ensemble & full $n=1{,}434$          & MAE & $-2.00$ & 0.046 & \textbf{Baseline wins} \\
+Baseline vs Ensemble & volatile $n=27$           & MSE & $+0.62$ & 0.542 & tie \\
+Baseline vs Ensemble & volatile $n=27$           & MAE & $+0.22$ & 0.831 & tie \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection*{Priors vs reality}
+
+\begin{center}
+\renewcommand{\arraystretch}{1.15}
+\begin{tabular}{@{}p{4cm}p{3.5cm}p{4cm}p{3.5cm}@{}}
+\toprule
+Test & Prior (pre-run) & Actual & Assessment \\
+\midrule
+Naive vs Baseline                & Strongly reject ($p < 0.01$) & MSE $p=0.17$ (tie), MAE $p=0.014$ (reject) & Weaker than predicted on MSE. The squared-error loss has higher variance, so the HAC-corrected test has less power. MAE gives the clean claim. \\
+Baseline vs Ensemble (full)      & Ambiguous                     & MSE $p=0.08$, MAE $p=0.046$               & Prior confirmed. Result is borderline --- depending on loss and $\alpha$, baseline either marginally wins or ties. \\
+Baseline vs Ensemble (volatile)  & Likely fail to reject despite large gap & $p=0.54$ / $0.83$                 & Prior confirmed. $n=27$ is simply too small. \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection*{Defensible claims for the paper}
+
+\begin{itemize}[leftmargin=*]
+  \item ``The baseline LSTM is more accurate than the 21-day rolling-volatility persistence baseline (DM MAE test, $p=0.014$).'' $\leftarrow$ strongest claim; use MAE not MSE.
+  \item ``The baseline LSTM matches or slightly outperforms the HMM-LSTM ensemble on aggregate (DM, $p=0.046$ MAE, $p=0.080$ MSE).'' $\leftarrow$ honest framing. Not ``the ensemble fails.''
+  \item ``On volatile-dominant subperiods, the ensemble is \emph{directionally} more accurate (point-estimate MSE 0.00005 vs 0.00008), but the $n=27$ subsample is underpowered to reject equal accuracy at $\alpha=0.05$.'' $\leftarrow$ directional with explicit caveat.
+\end{itemize}
+
+\subsection*{Training stochasticity --- a new concern}
+
+Compared to the previously-saved nb 06 output (a prior run by a teammate):
+
+\begin{center}
+\begin{tabular}{lrrl}
+\toprule
+Model & Prior saved MSE & This-run MSE & Change \\
+\midrule
+Baseline & 1.5e-5 & 1.6e-5 & +7\% \\
+Calm     & 2.0e-5 & 4.1e-5 & \textbf{+105\%} \\
+Volatile & 8.5e-5 & 8.5e-5 & 0\% \\
+Ensemble & 1.7e-5 & 2.6e-5 & \textbf{+53\%} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Same config, same seeds in \texttt{config.py} (\texttt{RANDOM\_STATE=42}, \texttt{LSTM\_RANDOM\_STATE=42}), same data. The gap comes from (a) Optuna's TPE exploration --- different trial sequences can converge to different hyperparameter neighbourhoods, (b) CPU PyTorch non-determinism without \texttt{torch.use\_deterministic\_algorithms(True)}.
+
+\textbf{Implication:} ranking claims based on a single training run are fragile. The baseline-vs-ensemble MSE gap went from 13\% (prior) to 63\% (this run). Before locking in the narrative for the paper, we should run $k \geq 5$ seeds and report mean$\pm$std on each metric, or at minimum run 3 seeds and report the range. This is a real limitation to cite in the paper's methodology/limitations section.
+
+\subsection*{Why this entry matters for the paper writeup}
+
+\begin{itemize}[leftmargin=*]
+  \item Shows the empirical result is genuinely nuanced, not a clean win or loss.
+  \item Documents that we identified and tested methodological weaknesses (no significance testing $\to$ added DM; single-run results $\to$ flagged multi-seed need).
+  \item Provides a transparent trail: priors $\to$ actual results $\to$ assessment, which is the kind of thing reviewers value.
+\end{itemize}
+
+\end{document}
