@@ -388,6 +388,45 @@ The headline comparison tracks the 4 best per-variant predictors + naive: `{naiv
 - **Variant H has the tightest peak cross-correlation** (r = 0.855 at lag −16) and the *lowest* zero-lag correlation (0.502). Interpretation: giving the model `p_volatile` directly makes it an *even tighter persistence predictor*, because the HMM probability is itself a lagged signal. H gets the regime information "for free" without the degeneracy risk of training a separate volatile LSTM, but loses a bit on zero-lag correlation compared to A.
 - **Variant A has the highest zero-lag correlation** (0.600). The full regime-split ensemble — despite its moving parts — captures same-day variance *slightly better* than either single-LSTM alternative.
 
+### Plain-English primer — how to read the F1 cross-correlation diagnostic
+
+*Written to be shareable with partners who see `peak_lag`, `peak_r`, `r@lag0` in the result tables and need to know what they mean without going through the math.*
+
+**What the diagnostic measures.** Is our model actually predicting *future* volatility, or is it just echoing *recent* volatility? We check this by sliding the prediction series against the target and computing the correlation at every offset ℓ from −30 to +30:
+
+> correlation of `pred_t` vs. `target_{t + ℓ}`
+
+where `pred_t` is the LSTM's prediction for day *t* and `target_{t+ℓ}` is the actual realised vol on day *t* + *ℓ*.
+
+| Offset | Meaning |
+|---|---|
+| **ℓ = 0** | prediction matches same-day target — this is what we want |
+| **ℓ > 0** | prediction leads the future — even better, but realistically unachievable on price-only features |
+| **ℓ < 0** | prediction matches a *past* target — the model is echoing recent vol, not forecasting |
+
+**The three numbers reported in every result table:**
+
+- **`peak_lag`** — at which offset does the correlation hit its maximum? A real forecaster peaks at 0. A "delayed echo" peaks at some negative number.
+- **`peak_r`** — how strong is the correlation at that maximum (0 = nothing, 1 = perfect).
+- **`r@lag0`** — correlation strictly at ℓ = 0. This is the honest same-day forecasting skill.
+
+**What our post-merge numbers actually show:**
+
+| Predictor | peak_lag | peak_r | r@lag0 |
+|---|---|---|---|
+| naive `rolling_std_21` | **−21** | 1.000 (identity) | 0.458 |
+| variant A ensemble | **−16** | 0.808 | 0.600 |
+| variant H baseline | **−16** | 0.855 | 0.502 |
+| variant B ensemble | **−17** | 0.815 | 0.541 |
+
+Reading the table:
+
+- **Peak lag is hugely negative** (−16 to −21) for every predictor. Our models match volatility from ~16 days ago much better than they match the target they were trained to predict. They are delayed echoes, not forecasts.
+- **`peak_r` is high** (0.81 – 0.86). The models *are* strong at this wrong thing — reproducing past vol. That's why aggregate MSE / MAE look respectable.
+- **`r@lag0` is only moderate** (0.50 – 0.60). Our best predictor (variant A ensemble) sits at 0.600; naive is at 0.458. We are only about 0.14 correlation *units* better than "guess recent vol".
+
+**One-sentence takeaway**: our models look accurate on aggregate metrics because they've learned to reproduce *past* volatility, but their actual ability to forecast *future* volatility is only modestly better than the naive persistence baseline — and this is a structural property of the daily-frequency × 21-day-forward target (F1), not something any of the three variants we tested (A / H / B) was able to fix.
+
 ### Defensible claims for the paper
 
 - *"All three sentiment-augmented variants (ensemble, HMM-feature, VIX-ensemble) tie on test MSE / MAE at h = 21. Adding the HMM regime as an LSTM feature (H) does not beat the soft-probability regime-split ensemble (A). Adding forward-looking VIX-family features on top (B) does not beat either."* — headline negative result, ruling out two plausible fixes.
