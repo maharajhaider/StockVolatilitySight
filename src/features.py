@@ -92,6 +92,48 @@ def add_relative_volume(df: pd.DataFrame, volume_col: str = "Volume", window: in
     return df
 
 
+# ── VIX-family derived features ────────────────────────────────────────────────
+
+# Canonical names of the VIX-family raw columns written by data_loader.download_vix_family().
+VIX_RAW_COLS = ("vix", "vix3m", "skew", "vvix")
+
+
+def add_vix_features(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Derive stationary and term-structure features from the CBOE VIX family.
+
+    Raw columns expected in *df* (from data_loader.download_vix_family()):
+        vix, vix3m, skew, vvix
+
+    Features added
+    --------------
+    vix_log_change    : ln(VIX_t / VIX_{t-1}) — stationary daily shock in IV
+    vix3m_minus_vix   : 3-month − spot VIX — term-structure slope
+                        (positive = contango / calm; negative = backwardation / stressed)
+
+    Raw levels (vix, skew, vvix) are retained as-is from the input — their raw
+    level is informative about the current IV regime and is bounded / strongly
+    mean-reverting, so we treat them like the existing OHLCV-derived features.
+
+    Missing raw columns are tolerated: the corresponding derived feature is
+    emitted as all-NaN rather than raising. This lets the same pipeline run
+    both for variant A (VIX columns absent) and variant B (VIX columns present).
+    """
+    df = df.copy()
+
+    if "vix" in df.columns:
+        df["vix_log_change"] = np.log(df["vix"] / df["vix"].shift(1))
+    else:
+        df["vix_log_change"] = np.nan
+
+    if "vix" in df.columns and "vix3m" in df.columns:
+        df["vix3m_minus_vix"] = df["vix3m"] - df["vix"]
+    else:
+        df["vix3m_minus_vix"] = np.nan
+
+    return df
+
+
 # ── Rolling features ───────────────────────────────────────────────────────────
 
 def add_rolling_stats(
@@ -321,8 +363,10 @@ def build_features(
     4.  Intraday range (log-normalised)
     5.  Log volume
     6.  Rolling mean / std of log_return (multiple windows)
-    7.  Forward realized volatility target
-    8.  AAII sentiment columns (weekly → daily forward fill)
+    7.  VIX-family derived features (vix_log_change, vix3m_minus_vix) —
+        produces all-NaN columns if the raw VIX columns are absent
+    8.  Forward realized volatility target
+    9.  AAII sentiment columns (weekly → daily forward fill)
 
     NaN rows at the start (due to lagging) and end (due to forward target)
     are NOT dropped here — the caller decides when to drop them.
@@ -338,6 +382,7 @@ def build_features(
     df = add_log_volume(df)
     df = add_relative_volume(df)
     df = add_rolling_stats(df, windows=rolling_windows)
+    df = add_vix_features(df)
     df = add_realized_volatility(df, window=vol_window, annualise=annualise_target)
     df = ensure_sentiment_columns(df, raw_dir=raw_dir)
 

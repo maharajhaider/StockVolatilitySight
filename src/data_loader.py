@@ -3,6 +3,9 @@ Data loading utilities.
 
 Responsibilities:
 - Download SPY OHLCV via yfinance
+- Download VIX-family series via FRED (VIXCLS, VXVCLS)
+  (yfinance ^VIX/^VIX3M are unreliable under mild rate-limit pressure;
+  FRED is served by the St. Louis Fed and is generous about rate limits.)
 - Load CBOE put/call ratio (manual CSV or pandas_datareader)
 - Load and align AAII weekly sentiment survey data
 - Merge all sources into a single daily DataFrame indexed by date
@@ -74,6 +77,79 @@ def download_spy(
         logger.info("Cached SPY OHLCV → %s", cache_path)
 
     return df
+
+
+# ── VIX family via FRED (VIXCLS, VXVCLS) ──────────────────────────────────────
+
+# FRED series id → canonical column name used throughout the rest of the pipeline.
+# VIXCLS  : 30-day implied volatility (S&P 500 options)   — from 2001
+# VXVCLS  : 3-month implied volatility (CBOE 3M VIX)      — from 2007-12
+# (CBOE SKEW and VVIX are not hosted on FRED, so those features are dropped
+#  from the variant-B feature set — see config.VIX_FAMILY_FEATURES.)
+VIX_FAMILY_FRED_SERIES = {
+    "VIXCLS": "vix",
+    "VXVCLS": "vix3m",
+}
+
+
+def download_vix_family(
+    start: str = "2001-01-01",
+    end: str | None = None,
+    raw_dir: Path | str | None = None,
+    force_refresh: bool = False,
+) -> pd.DataFrame:
+    """
+    Download daily close levels for VIX and VIX3M from FRED.
+
+    Returns a DataFrame indexed by Date with columns 'vix' and 'vix3m'.
+    VIX3M (VXVCLS) starts 2007-12-04, so earlier rows are NaN for that
+    column. Cached to <raw_dir>/vix_family.parquet if *raw_dir* is provided.
+
+    FRED is used instead of yfinance for these indices because yfinance's
+    ^VIX / ^VIX3M fetches intermittently return "possibly delisted /
+    no price data" errors under mild rate-limit pressure, whereas FRED
+    (via pandas_datareader) is served by the St. Louis Fed and is generous
+    about rate limits.
+    """
+    if raw_dir is not None:
+        raw_dir = Path(raw_dir)
+        cache_path = raw_dir / "vix_family.parquet"
+        if cache_path.exists() and not force_refresh:
+            logger.info("Loading VIX family from cache: %s", cache_path)
+            return pd.read_parquet(cache_path)
+
+    import pandas_datareader.data as pdr
+
+    logger.info("Downloading VIX family (VIXCLS, VXVCLS) from FRED…")
+    closes = {}
+    for series_id, col in VIX_FAMILY_FRED_SERIES.items():
+        try:
+            df = pdr.DataReader(series_id, "fred", start=start, end=end)
+            closes[col] = df.iloc[:, 0]
+        except Exception as e:
+            logger.warning("FRED series %s failed (%s) — filling with NaN", series_id, e)
+            closes[col] = pd.Series(dtype=float)
+
+    out = pd.DataFrame(closes)
+    out.index = pd.to_datetime(out.index)
+    out.index.name = "Date"
+    out = out.sort_index()
+    out = out.dropna(how="all")
+
+    # Sanity check: VIXCLS has the longest history on FRED and should never
+    # come back entirely empty. If it does, something is wrong upstream.
+    if "vix" in out.columns and out["vix"].notna().sum() == 0:
+        raise RuntimeError(
+            "FRED returned all-NaN VIXCLS. Check network connectivity or "
+            "try a different data source."
+        )
+
+    if raw_dir is not None:
+        raw_dir.mkdir(parents=True, exist_ok=True)
+        out.to_parquet(cache_path)
+        logger.info("Cached VIX family → %s", cache_path)
+
+    return out
 
 
 # ── CBOE Put/Call Ratio ────────────────────────────────────────────────────────
@@ -268,18 +344,25 @@ def build_raw_dataset(
     # 1. SPY OHLCV
     ohlcv = download_spy(ticker, start=start, end=end, raw_dir=raw_dir, force_refresh=force_refresh)
 
-    # 2. Put/call ratio (daily)
+    # 2. VIX family (daily close prices for ^VIX, ^VIX3M, ^SKEW, ^VVIX)
+    vix_family = download_vix_family(
+        start=start, end=end, raw_dir=raw_dir, force_refresh=force_refresh,
+    )
+    vix_family = vix_family.reindex(ohlcv.index)  # align to SPY trading days
+
+    # 3. Put/call ratio (daily)
     pc = load_putcall_ratio(raw_dir=raw_dir)
     if not pc.empty:
         pc = pc.reindex(ohlcv.index)  # align to trading days, NaN for missing
 
-    # 3. AAII sentiment (weekly → daily)
+    # 4. AAII sentiment (weekly → daily)
     sentiment = load_aaii_sentiment(raw_dir=raw_dir)
     if not sentiment.empty:
         sentiment = _forward_fill_weekly_to_daily(sentiment, ohlcv.index)
 
-    # 4. Merge
+    # 5. Merge
     df = ohlcv.copy()
+    df = df.join(vix_family, how="left")
     if not pc.empty:
         df = df.join(pc, how="left")
     if not sentiment.empty:

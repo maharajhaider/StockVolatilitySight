@@ -49,6 +49,21 @@ PUTCALL_FEATURES = [
     "put_call_ratio",
 ]
 
+# VIX-family features used in the forward-looking feature experiment (variant B).
+# - vix                         : raw VIX closing level (bounded, mean-reverting)
+# - vix_log_change              : ln(VIX_t / VIX_{t-1}) — stationary daily IV shock
+# - vix3m_minus_vix             : 3-month − spot VIX — term-structure slope
+#
+# Source: FRED (VIXCLS, VXVCLS). SKEW and VVIX were dropped because FRED does
+# not host them and yfinance's equivalents (^SKEW, ^VVIX) are too unreliable
+# to depend on. VIX3M starts 2007-12-04 on FRED, so variant-B training
+# effectively starts 2007-12 (~150 fewer train rows than variant A's 2005-01).
+VIX_FAMILY_FEATURES = [
+    "vix",
+    "vix_log_change",
+    "vix3m_minus_vix",
+]
+
 # Price / volume HMM inputs (notebook 01 correlation prune; VIF informational only).
 HMM_PRICE_VOLUME_FEATURES = [
     "log_return",
@@ -104,8 +119,24 @@ LSTM_STATIONARY_FEATURES = [
     "relative_volume_21d",
 ]
 
-# Default baseline LSTM = stationary + AAII sentiment (requires aaii_sentiment.csv in data/raw/).
+# Default baseline LSTM = stationary + AAII sentiment (requires aaii_sentiment.csv/.xls in data/raw/).
 LSTM_BASELINE_FEATURES = LSTM_STATIONARY_FEATURES + SENTIMENT_FEATURES
+
+# ── Variant feature sets for the forward-looking features experiment ──────────
+# Variant A = current baseline (LSTM_BASELINE_FEATURES above — stationary + sentiment).
+# Variant B = A augmented with VIX-family forward-looking features.
+#
+# NOTE: the variant A/B LSTM checkpoints on disk prior to this merge were trained
+# against *pre-sentiment* LSTM_BASELINE_FEATURES (5 stationary features only).
+# After the sentiment merge, re-running nb 07 will retrain variant B against the
+# sentiment-augmented baseline for an apples-to-apples comparison. See
+# supplementary/discussion.md for the post-merge re-run checklist.
+#
+# HMM features are NOT augmented with VIX — regime labels remain derived from
+# price/volume + sentiment only so that variant A and variant B share the same
+# HMM regime sequence. This isolates the LSTM's response to the new features.
+LSTM_VARIANT_A_FEATURES = list(LSTM_BASELINE_FEATURES)
+LSTM_VARIANT_B_FEATURES = LSTM_VARIANT_A_FEATURES + VIX_FAMILY_FEATURES
 
 # Target column produced by features.build_features().
 LSTM_TARGET = f"realized_vol_{VOL_WINDOW}d"

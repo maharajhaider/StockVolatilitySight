@@ -260,3 +260,74 @@ Same config, same seeds in `config.py` (`RANDOM_STATE=42`, `LSTM_RANDOM_STATE=42
 - Shows the empirical result is genuinely nuanced, not a clean win or loss.
 - Documents that we identified and tested methodological weaknesses (no significance testing → added DM; single-run results → flagged multi-seed need).
 - Provides a transparent trail: priors → actual results → assessment, which is the kind of thing reviewers value.
+
+## 2026-04-23 (late evening) — Variant B: forward-looking VIX-family features
+
+### Motivation
+
+F1 (in `report.md`) predicts that forward-looking features should be the only way out of the persistence-shift floor. This experiment directly tests the prediction: train a parallel set of LSTMs (baseline + calm + volatile) on variant A's features *plus* the CBOE VIX-family forward-looking indices, re-run the soft-probability ensemble, and Diebold-Mariano each model pair against variant A.
+
+### Scope and design decisions
+
+- **Variant A**: existing checkpoints (variant A LSTMs were not retrained — per user instruction, "we already have the data").
+- **Variant B**: variant A's 5 LSTM features + `vix`, `vix_log_change`, `vix3m_minus_vix` = 8 input features.
+- **HMM**: fixed. Same regime labels and same soft probabilities feed both variant A's and variant B's ensembles. This isolates the LSTM's response to the new features from any HMM-regime reshuffle.
+- **Data source**: FRED (`VIXCLS`, `VXVCLS`) via `pandas_datareader`. We originally wanted the full yfinance VIX family (`^VIX`, `^VIX3M`, `^SKEW`, `^VVIX`) but yfinance turned out to be too unreliable for index tickers under rate-limit pressure, and FRED doesn't host SKEW / VVIX. Reduced set = 2 raw + 2 derived = 3 features used.
+- **Training window**: variant B's LSTMs effectively start 2007-12-04 (when VXVCLS's history begins), losing ~1,680 training rows. Val and test windows are unchanged.
+- **Reproducibility**: `src/data_loader.py::download_vix_family()`, `config.py::VIX_FAMILY_FEATURES`, and `notebooks/07_variant_b_experiment.ipynb` encode the full spec. Re-executing nb 07 regenerates variant B end-to-end.
+
+### Results
+
+Test-set performance on the 1,434 common rows (2020-06-30 → 2026-03-16):
+
+| Model | Variant A MSE | Variant B MSE | Δ |
+|---|---|---|---|
+| Baseline LSTM | 1.60×10⁻⁵ | **1.36×10⁻⁵** | −15 % |
+| Calm LSTM | 4.10×10⁻⁵ | **1.42×10⁻⁵** | −65 % |
+| Volatile LSTM | 8.50×10⁻⁵ | 9.26×10⁻⁵ | +9 % (worse) |
+| Soft-prob ensemble | 2.60×10⁻⁵ | **1.40×10⁻⁵** | −46 % |
+
+Diebold-Mariano (A vs B, h=21, Bartlett HAC, HLN-corrected; positive DM ⇒ B wins):
+
+| Model | MSE DM | MSE p | MAE DM | MAE p | Verdict (α=.05) |
+|---|---|---|---|---|---|
+| baseline | +1.86 | 0.064 | +1.71 | 0.087 | tie (marginal) |
+| calm | +1.85 | 0.065 | +2.33 | 0.020 | **B wins on MAE** |
+| volatile | −13.09 | <.001 | −16.99 | <.001 | **A wins ***|
+| ensemble | +1.93 | 0.054 | +2.14 | 0.033 | **B wins on MAE** |
+
+### F1 diagnostic — did the shift lag shrink?
+
+Cross-correlation peak lag (variant A → variant B):
+
+- Baseline: −16 → **−14** days
+- Calm: −18 → **−14** days
+- Ensemble: −17 → **−16** days
+- Volatile: meaningless (both LSTMs degenerate, peak correlation is negative)
+
+Small reduction (2-4 days out of ~17), not a structural escape. Peak correlation at lag 0 improved modestly (baseline 0.56 → 0.57; ensemble 0.53 → 0.55). The persistence-shift floor is still clearly there.
+
+### F2 diagnostic — volatile-LSTM degeneracy
+
+| Variant | Volatile pred std | Volatile pred range |
+|---|---|---|
+| A | 5.3×10⁻⁵ | 8×10⁻⁴ |
+| B | 1.6×10⁻⁴ | 7×10⁻⁴ |
+
+Variant B's volatile LSTM has 3× higher prediction std than variant A's but both are still orders of magnitude below the target std (~4×10⁻³). Range barely changed. **F2 persists** — VIX features don't provide enough signal on the ~170-sample volatile training set to break the constant-output collapse.
+
+### Interpretation for the paper
+
+VIX features meaningfully improve point forecasts on calm-regime days and therefore the ensemble (since the HMM assigns calm weight ≈1 on ~97% of days). But:
+
+1. The improvement is consistent with "tighter persistence prediction" (variant B's prediction std is *smaller* than variant A's, not larger), not "forward-looking information".
+2. The shift lag reduces only marginally.
+3. The volatile LSTM degeneracy persists (F2 is a data-scarcity problem, not a feature-set problem).
+
+**This strengthens the structural-limits framing**: even the options market's own implied-volatility forecast — the best forward-looking signal available for equity volatility — doesn't pull a daily-resolution LSTM off the persistence floor. The limitation is data-rate × target-horizon, not feature coverage.
+
+### Defensible claims for the paper
+
+- *"Adding forward-looking VIX-family features reduces ensemble test MSE by 46% (2.6×10⁻⁵ → 1.4×10⁻⁵), statistically significant on MAE (DM p=0.033)."* — headline positive result from variant B.
+- *"However, the cross-correlation peak lag of LSTM predictions vs. the target only shifts from −17 days to −16 (ensemble) / −14 (baseline, calm). The persistence-shift floor is not structurally escaped."* — the F1 limitation survives.
+- *"The volatile-regime LSTM remains effectively constant (prediction std 1.6×10⁻⁴ vs. target std 4×10⁻³) under both variants, confirming F2 is a data-scarcity problem not a feature-set problem."* — F2 survives.

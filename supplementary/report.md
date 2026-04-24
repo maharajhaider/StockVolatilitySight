@@ -25,7 +25,11 @@ Negative lag = the prediction is *shifted later than* the target = the model is 
 
 **Implication:** on a 21-day-forward target with price/volume features only, there's no forward-looking signal to extract — the gradient-trained optimum is "output something close to recent vol." The deep model captures ~70% of the variance the naive captures.
 
-**Why this is structural, not architectural.** Future returns are not predictable from past returns (anything close to Efficient Markets Hypothesis). Future-magnitude (vol) is modestly predictable from past-magnitude, but only via persistence. No LSTM architecture on price/volume inputs can escape this — the shift is a *data* property, not a model property. **The fix is forward-looking inputs that aren't derived from past SPY prices** — implied vol (VIX), scheduled-event calendars, option-positioning (put/call, sentiment). We deliberately excluded these to characterize what price-only models can and can't do; see Future Work and F5 framing.
+**Why this is structural, not architectural.** Future returns are not predictable from past returns (anything close to Efficient Markets Hypothesis). Future-magnitude (vol) is modestly predictable from past-magnitude, but only via persistence. No LSTM architecture on price/volume inputs can escape this — the shift is a *data* property, not a model property.
+
+**Tested directly via variant B (VIX-family features).** We retrained the baseline + regime LSTMs on variant A's features *plus* `vix`, `vix_log_change`, `vix3m_minus_vix` (FRED `VIXCLS` + `VXVCLS`; SKEW/VVIX dropped because FRED doesn't host them). Result: MSE improves (ensemble 2.6×10⁻⁵ → 1.4×10⁻⁵, DM MAE p=0.033) but the **cross-correlation peak lag barely shifts** — baseline −16 → −14, ensemble −17 → −16, calm −18 → −14. The persistence-shift floor survives even when we hand the model the options market's own implied-vol forecast. See `notebooks/07_variant_b_experiment.ipynb` and the `supplementary/discussion.md` entry dated 2026-04-23 (late evening) for the full results.
+
+**What would actually escape F1:** the shift is data-rate × horizon. Higher-frequency bars (5-min) or a shorter target horizon (1-day) would change the problem, not just the features. See Future Work.
 
 ### F2 — The Volatile LSTM is structurally degenerate (essentially constant)
 
@@ -36,6 +40,8 @@ Negative lag = the prediction is *shifted later than* the target = the model is 
 | **Volatile** | **0.0001** | **0.0175 → 0.0183** |
 
 The Volatile LSTM's predictions vary by less than 0.8 basis points across the whole test set — it outputs ~0.0179 regardless of input (the mean of its 181 training targets). With a 17k-parameter LSTM on 181 windows, Optuna found "output the mean" as the best solution. When `p_volatile > 0` in the ensemble this constant pulls predictions up toward 0.018, way above typical calm-day vol (~0.008), actively contaminating the ensemble.
+
+**F2 persists under VIX features (variant B).** Retraining the volatile LSTM with VIX-family inputs added (variant B, see §4.5) changes the prediction std from 5.3×10⁻⁵ to 1.6×10⁻⁴ — three times larger, but still two orders of magnitude below the target std (~4×10⁻³). Range essentially unchanged (0.0175→0.0183 becomes 0.0180→0.0187). Variant B's volatile LSTM is, if anything, **significantly worse** on the test set (DM MSE p<0.001 in A's favour). This is the data-scarcity limit (F4) showing through: no amount of feature richness rescues ~170 training samples dominated by one crisis.
 
 ### Combined framing for the paper
 
@@ -253,6 +259,32 @@ Three axes along which the problem could be made tractable (none of which we cou
   - **Also a design note for the paper**: `p_calm + p_volatile = 1` always, so the two columns are perfectly collinear. OLS exploded with intercept ~10⁸; Ridge regularization saved the fit. If we were to do this cleanly, drop one of the two probability columns. Worth a sentence.
   - **Phase 2 (nonlinear MLP gate) was skipped** on these grounds. See Combined framing §F3 for the structural argument: (a) p_volatile rarely varies (97% of days are fully calm), (b) the volatile expert is a constant, so even a perfect gate has nothing useful to gate *toward*. A nonlinear gate faces the same two constraints; no additional structure is discoverable.
 
+### 4.5 Forward-looking feature experiment (variant B, VIX family)
+
+*Direct test of the F1 escape-hypothesis — full writeup in `notebooks/07_variant_b_experiment.ipynb` and the `supplementary/discussion.md` entry dated 2026-04-23 (late evening).*
+
+- [ ] **Experiment Q — Variant B: add VIX-family features, retrain all three LSTMs, re-run ensemble**
+  - Question: if F1 is a *feature* problem (as §F1 hypothesises), adding the options market's own implied-vol forecast should pull the shift lag toward zero and improve aggregate metrics.
+  - Features added (3): `vix` (FRED `VIXCLS`), `vix_log_change` (derived), `vix3m_minus_vix` (derived from `VXVCLS` − `VIXCLS`). SKEW and VVIX were dropped because FRED doesn't host them and yfinance's equivalents were unreliable. HMM regime labels held fixed (same regimes drive both ensembles) to isolate the LSTM response.
+  - Training window for variant B: 2007-12 onward (VXVCLS start date) → ~2,034 LSTM training rows vs. ~3,020 for variant A. Val + test windows unchanged.
+  - Result — aggregate metrics:
+
+    | Model | Variant A MSE | Variant B MSE | Δ |
+    |---|---|---|---|
+    | Baseline LSTM | 1.60×10⁻⁵ | **1.36×10⁻⁵** | −15 % |
+    | Calm LSTM | 4.10×10⁻⁵ | **1.42×10⁻⁵** | −65 % |
+    | Volatile LSTM | 8.50×10⁻⁵ | 9.26×10⁻⁵ | **+9 % (worse)** |
+    | Soft-prob ensemble | 2.60×10⁻⁵ | **1.40×10⁻⁵** | −46 % |
+
+  - DM significance (B vs A, h=21, HLN-corrected, positive ⇒ B wins): ensemble MAE **p=0.033 (B wins)**, calm MAE **p=0.020 (B wins)**, volatile MSE/MAE **p<0.001 (A wins)**, baseline + ensemble MSE marginal ties (p≈0.06).
+  - **F1 diagnostic (the headline question)**: cross-correlation peak lag moves from −16/−17/−18 days (variant A baseline/ensemble/calm) to −14/−16/−14 (variant B). **Small shift (2–4 days), not a structural escape.** Zero-lag correlation improves only modestly (baseline 0.56→0.57; ensemble 0.53→0.55).
+  - **F2 diagnostic**: volatile-LSTM prediction std 5.3×10⁻⁵ (A) vs 1.6×10⁻⁴ (B). Both two orders of magnitude below target std (~4×10⁻³). Variant B's volatile LSTM is statistically *worse* (DM p<0.001). **F2 persists.**
+  - **Interpretation**: VIX features yield meaningful MSE gains (mostly via the calm LSTM tightening its predictions toward the mean), and therefore improve the ensemble. But the persistence-shift *structure* is not broken — variant B is a tighter persistence predictor, not a forward-looking predictor. This *corroborates* the F1 framing: even the options market's own IV forecast can't pull a daily-resolution LSTM off the shift floor.
+  - **Two clean claims for the paper**:
+    1. ✅ *"Adding forward-looking VIX features to the feature set reduces ensemble test MSE by 46% (2.6×10⁻⁵ → 1.4×10⁻⁵, DM MAE p=0.033)."*
+    2. ✅ *"But the cross-correlation peak lag only improves by 2–4 days — the persistence-shift floor survives even with explicit forward-looking implied-volatility input. This corroborates F1: the shift is a data-rate × horizon property, not a feature-set property."*
+  - **Caveat to note**: variant A's LSTMs were trained on the full 2005-01 → 2015-12 window (~3,020 rows); variant B's start 2007-12 (~2,034 rows) because VXVCLS history begins then. Test comparison is apples-to-apples (same test window); training-set difference is a minor methodological asymmetry worth a sentence.
+
 ---
 
 ## General Don't-Miss Items
@@ -298,13 +330,9 @@ Ordered by leverage — the three data-scarcity axes (F4) first, then lower-leve
 - [ ] **Transferability of volatile-regime dynamics across asset classes** — standalone companion contribution worth considering. Before investing in transfer learning, compute autocorrelation + tail-index profile of volatile days per asset class and measure similarity. If volatile dynamics are universal → transfer-learning path is defensible. If asset-specific → second-order finding: "volatile-regime dynamics do not generalize across asset classes; data-scarcity cannot be solved by pooling." Either outcome is a paper-worthy contribution in its own right.
 - [ ] **Activate sentiment + put/call features** (proposal's Ho et al. / Gupta et al. motivation) — orthogonal to the data-scarcity axes; addresses the persistence-predictor problem (F1) by introducing non-price signals the baseline LSTM currently lacks. Single most likely change to yield a *forward-looking* signal.
 
-- [ ] **Add options-derived forward-looking features** — *the* canonical fix for the shift in F1. Options prices encode market expectations about future vol and tail risk that past returns cannot contain. Ordered by data-engineering cost (all Tier-1 items are free yfinance tickers):
-  - **Tier 1 — CBOE indices (single-ticker, ~5 lines each)**:
-    - `^VIX` — 30-day S&P 500 option-implied vol (literally the market's forecast of our target).
-    - `^VIX3M` — 3-month IV; `VIX / VIX3M` ratio is a stress indicator (>1 = backwardation, near-term stress expected).
-    - `^SKEW` — CBOE SKEW Index, measures the left-tail crash-risk *premium* priced into OTM puts. **Strictly more informative than the put/call volume ratio** (price-based vs volume-based, from the same market, same data-engineering cost).
-    - `^VVIX` — vol-of-vol; rising VVIX often precedes vol regime changes.
-  - **Tier 2 — IV skew and risk reversal** (requires SPX option chain data, more engineering): IV(25Δ put) − IV(25Δ call) captures the asymmetric tail premium that aggregate put/call volume blurs.
+- [x] **Add options-derived forward-looking features** — *partially tested as variant B (see §4.5)*. We added `vix` (FRED `VIXCLS`), `vix_log_change`, and `vix3m_minus_vix` (`VXVCLS` − `VIXCLS`) to the LSTM feature set, retrained baseline + calm + volatile LSTMs, and re-ran the ensemble. **Result: ensemble MSE −46% (DM MAE p=0.033) but peak cross-correlation lag only improves from −17 to −16 days — F1 survives.** What remains as future work from this branch:
+  - **Add SKEW and VVIX** — FRED discontinued these series; yfinance's `^SKEW` / `^VVIX` were too unreliable to depend on in our test runs. A reliable data source (paid CBOE DataShop or scraped archive) would let us test whether tail-risk premium (SKEW) or vol-of-vol (VVIX) carry forward-looking signal that spot VIX does not.
+  - **Tier 2 — IV skew and risk reversal** (requires SPX option chain data, more engineering): IV(25Δ put) − IV(25Δ call) captures the asymmetric tail premium that aggregate put/call volume blurs. Variant B's evidence suggests this is a low-priority lever — if spot VIX only moves the shift by 1-3 days, finer option structure is unlikely to move it dramatically more.
   - **Tier 3 — Dealer positioning (GEX, vanna)**: specialized paid data (SpotGamma / Squeezemetrics); likely out of scope.
   - **Crucial benchmark caveat when any of these are added**: the relevant baseline shifts from `rolling_std_21` to **VIX (or VIX-derived blend) alone as a direct prediction**. If `LSTM + VIX ≈ VIX_alone` on test, the LSTM contributes nothing; the signal was already in VIX. Beating VIX directly is a genuinely hard and interesting result.
   - **Distinction from your partner's work**: put/call volume ratio is *sentiment-like* (counting flow); VIX / SKEW / VVIX are *expectation-like* (prices of future-outcome contracts). Complementary rather than substitutes. A strong version of the non-price-feature pipeline would include both.

@@ -428,7 +428,7 @@ def train_one_regime(
 
     # ── 8. Persist ───────────────────────────────────────────────────────────
     config.MODELS_DIR.mkdir(parents=True, exist_ok=True)
-    prefix = f"lstm_{regime}"
+    prefix = f"lstm_{regime}{args.output_suffix}"
     model_path  = config.MODELS_DIR / f"{prefix}.pt"
     scaler_path = config.MODELS_DIR / f"{prefix}_scaler.joblib"
 
@@ -482,6 +482,13 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--final-epochs", type=int, default=config.LSTM_FINAL_EPOCHS)
     p.add_argument("--patience",     type=int, default=config.LSTM_PATIENCE)
     p.add_argument("--seed",         type=int, default=config.LSTM_RANDOM_STATE)
+    p.add_argument(
+        "--output-suffix", default="",
+        help=(
+            "Optional suffix appended to saved-model filenames, e.g. '_B' → "
+            "models/lstm_calm_B.pt. Default empty preserves the original naming."
+        ),
+    )
     return p.parse_args()
 
 
