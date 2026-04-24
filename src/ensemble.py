@@ -97,12 +97,34 @@ def parse_args() -> argparse.Namespace:
             "(empty → test_predictions.parquet)."
         ),
     )
+    p.add_argument(
+        "--regime-probs-path", default=None,
+        help=(
+            "Path to regime probabilities parquet used for ensemble weighting. "
+            "Default None → data/processed/regime_probabilities.parquet. "
+            "For variant O: data/processed/regime_probabilities_O.parquet."
+        ),
+    )
+    p.add_argument(
+        "--hmm-meta-path", default=None,
+        help=(
+            "Path to HMM meta joblib. Default None → models/hmm_meta.joblib. "
+            "For variant O: models/hmm_meta_O.joblib."
+        ),
+    )
     return p.parse_args()
 
 
 def main():
     args = parse_args()
     suffix = args.variant_suffix
+
+    regime_probs_path = Path(args.regime_probs_path) if args.regime_probs_path else (
+        config.DATA_PROCESSED / "regime_probabilities.parquet"
+    )
+    hmm_meta_path = Path(args.hmm_meta_path) if args.hmm_meta_path else (
+        config.MODELS_DIR / "hmm_meta.joblib"
+    )
 
     logging.basicConfig(
         level=logging.INFO,
@@ -111,12 +133,15 @@ def main():
     )
     device = torch.device("cpu")
 
-    logger.info("Loading required data splits (variant suffix='%s')...", suffix or "<none>")
+    logger.info(
+        "Loading required data splits (variant_suffix='%s', regime_probs=%s, hmm_meta=%s)...",
+        suffix or "<none>", regime_probs_path, hmm_meta_path,
+    )
     test_df = pd.read_parquet(config.DATA_PROCESSED / "test.parquet")
-    rp = pd.read_parquet(config.DATA_PROCESSED / "regime_probabilities.parquet")
+    rp = pd.read_parquet(regime_probs_path)
 
     # The HMM states were mapped such that we saved probabilities as `p_calm` and `p_volatile`
-    meta = joblib.load(config.MODELS_DIR / "hmm_meta.joblib")
+    meta = joblib.load(hmm_meta_path)
 
     logger.info("Extracting aligned predictions for all LSTMs...")
     # Get predictions for all windows in the test set.

@@ -373,4 +373,416 @@ Same config, same seeds in \texttt{config.py} (\texttt{RANDOM\_STATE=42}, \textt
   \item Provides a transparent trail: priors $\to$ actual results $\to$ assessment, which is the kind of thing reviewers value.
 \end{itemize}
 
+\vspace{1em}
+\hrule
+\vspace{1em}
+
+\section*{2026-04-24 --- HAR-RV benchmark design: target-formula alignment}
+
+\subsection*{Why this entry exists}
+
+Before coding \texttt{src/har\_rv.py} we pin down exactly what target HAR-RV will predict and exactly what predictors it will use. This is not a neutral choice --- Corsi's original HAR-RV (2002/2004) uses a different target and a different predictor convention than our project's \texttt{realized\_vol\_21d}. Getting this wrong would make the benchmark non-comparable to our LSTMs / ensembles.
+
+User reviewed \texttt{ignore/ssrn-626064.pdf} (Corsi's original HAR-RV paper) and asked:
+
+\begin{enumerate}[leftmargin=*]
+  \item Is HAR-RV predicting backward volatility? Is that cheating?
+  \item Is $\sqrt{\text{variance}} = \text{volatility}$ as assumed in our target?
+  \item Document precisely where our target, Corsi's HAR-RV, and our adjusted HAR-RV agree and disagree.
+\end{enumerate}
+
+This entry answers all three.
+
+\subsection*{Three formulas, side by side}
+
+\paragraph{1. Our target (what every LSTM / ensemble in this project predicts).}
+Defined in \texttt{src/features.py::add\_realized\_volatility()} (lines 167--216). Andersen \& Bollerslev (1998) form, adapted for daily data with demeaning:
+\begin{equation}
+\sigma_t \;=\; \sqrt{\,\frac{1}{m}\sum_{j=1}^{m}\bigl(r_{t+j}-\bar r\bigr)^{2}\,}
+\end{equation}
+with $m=21$, $\bar r$ computed over the \emph{same} forward window $[t+1,\,t+m]$.
+
+\begin{itemize}[leftmargin=*]
+  \item \textbf{Forward-looking}: aggregates returns from $t{+}1$ to $t{+}m$.
+  \item \textbf{Demeaned}: AB98 subtract the window mean before squaring; appropriate for non-high-frequency data.
+  \item \textbf{Normalisation $1/m$}: population-variance convention (not $1/(m{-}1)$).
+  \item \textbf{Units}: volatility (sqrt of variance), same units as returns.
+\end{itemize}
+
+\paragraph{2. Corsi's original HAR-RV (ssrn-626064.pdf, equation 13).}
+\begin{equation}
+RV^{(d)}_{t+1d} \;=\; c \;+\; \beta^{(d)} RV^{(d)}_{t} \;+\; \beta^{(w)} RV^{(w)}_{t} \;+\; \beta^{(m)} RV^{(m)}_{t} \;+\; \omega_{t+1d}
+\end{equation}
+with the components defined on intraday data (his equation 3):
+\begin{align}
+RV^{(d)}_{t} &= \sqrt{\,\sum_{j=0}^{M-1} r^{2}_{t-j\Delta}\,}            && \text{(un-demeaned; $M$ intraday returns)} \\
+RV^{(w)}_{t} &= \tfrac{1}{5}\bigl(RV^{(d)}_{t} + \ldots + RV^{(d)}_{t-4d}\bigr)  && \text{(simple 5-day average)} \\
+RV^{(m)}_{t} &= \tfrac{1}{22}\bigl(RV^{(d)}_{t} + \ldots + RV^{(d)}_{t-21d}\bigr) && \text{(simple 22-day average)}
+\end{align}
+
+Structural differences from our target:
+
+\begin{center}
+\renewcommand{\arraystretch}{1.15}
+\begin{tabular}{@{}p{3.2cm} p{4.8cm} p{4.8cm}@{}}
+\toprule
+Aspect & Our target (AB98) & Corsi HAR-RV \\
+\midrule
+Forecast horizon           & 21 days ahead                                    & 1 day ahead \\
+Observation frequency      & daily                                            & intraday ($M$ ticks/day) \\
+Demeaning                  & yes                                              & no (intraday mean $\approx 0$) \\
+Normalisation              & $1/m$                                            & sum (daily) / simple avg (w,m) \\
+``Monthly'' window         & 21 trading days                                  & 22 trading days \\
+Units                      & volatility ($\sqrt{\cdot}$)                     & volatility ($\sqrt{\cdot}$) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{Crucial agreement}: Corsi is in \emph{volatility units}, not variance. His equation (3) is $\sqrt{\cdot}$, and his regression (equation 13) is linear in those sqrt-form quantities. So $\sqrt{\text{variance}} = \text{volatility}$ is consistent between Corsi and our target. This directly answers the user's question 2.
+
+\textbf{Not cheating}: the regression has future vol on the LHS and past-vol aggregates on the RHS. Same structure as our LSTMs --- past features $\to$ future target --- just OLS on three hand-engineered backward summaries instead of a deep model.
+
+\paragraph{3. Our adjusted HAR-RV (what \texttt{src/har\_rv.py} will implement).}
+\begin{equation}
+\underbrace{\texttt{realized\_vol\_21d}(t)}_{\text{y = OUR EXACT TARGET}} \;=\; c \;+\; \beta_d \cdot RV_d(t) \;+\; \beta_w \cdot RV_w(t) \;+\; \beta_m \cdot RV_m(t) \;+\; \varepsilon
+\end{equation}
+
+with predictor components at time $t$, using past returns only:
+\begin{align}
+RV_d(t) &= |r_t|                                                                       && \text{(un-demeaned; mandatory, see below)} \\
+RV_w(t) &= \sqrt{\,\tfrac{1}{5}\sum_{j=t-4}^{t}\bigl(r_j-\bar r_{5}\bigr)^{2}\,}       && \text{(demeaned; matches target formula)} \\
+RV_m(t) &= \sqrt{\,\tfrac{1}{21}\sum_{j=t-20}^{t}\bigl(r_j-\bar r_{21}\bigr)^{2}\,}    && \text{(demeaned; matches target formula)}
+\end{align}
+
+Key invariants:
+
+\begin{itemize}[leftmargin=*]
+  \item \textbf{$y$ unchanged}: same \texttt{realized\_vol\_21d} column that every other predictor in this project (A, H, B, O, naive) is evaluated against. MSE / MAE / MAPE / Diebold--Mariano all directly comparable.
+  \item \textbf{5- and 21-day components demeaned}: structurally identical to the target's formula at shorter backward windows.
+  \item \textbf{1-day component un-demeaned}: forced by mathematics. Demeaning a single observation is degenerate: $\text{mean}\bigl([\,r_t\,]\bigr) = r_t$, so $(r_t - \bar r)^2 = 0$. Corsi's convention handles this the same way.
+  \item \textbf{21-day monthly window (not 22)}: aligns with \texttt{config.ROLLING\_WINDOWS} and the target horizon. One-day cosmetic difference from Corsi.
+\end{itemize}
+
+\subsection*{Why the hybrid instead of pure Corsi or pure ``match-target-everywhere''}
+
+Two pure options were considered and rejected:
+
+\begin{itemize}[leftmargin=*]
+  \item \textbf{Pure Corsi} (all predictors un-demeaned, 22-day monthly): literature-faithful but gratuitously inconsistent with our target's demeaned formula, for windows where demeaning is well-defined and numerically matters.
+  \item \textbf{Pure ``match target everywhere''} (all three predictors demeaned at 1/5/21): the 1-day component mathematically collapses to 0. Benchmark reduces to a 2-predictor regression.
+\end{itemize}
+
+The hybrid preserves: $(a)$ $y$ exactly equal to our target (non-negotiable), $(b)$ predictors sharing the target's demeaned formula wherever defined (5- and 21-day), $(c)$ the 1-day component in the only sensible form available ($|r_t|$).
+
+\subsection*{HAR-RV is a horizon-parameterised family (resolves ``doesn't HAR-RV predict tomorrow?'')}
+
+A reasonable follow-up: Corsi's equation 13 has $RV^{(d)}_{t+1d}$ on the LHS --- i.e., \emph{tomorrow's} vol. How does that apply to our 21-day-forward problem?
+
+``HAR-RV'' in the literature is a family parameterised by the forecast horizon $h$. The RHS (backward 1/5/22-day vol components) never changes; only the LHS target changes:
+\begin{align}
+h &= 1   && \to\quad RV_{t+1d}            && \text{(Corsi's original, 1-day ahead)} \\
+h &= 5   && \to\quad RV_{t+1\,:\,t+5}       && \text{(weekly forecast)} \\
+h &= 22  && \to\quad RV_{t+1\,:\,t+22}      && \text{(monthly forecast --- our case, $h \approx 21$)}
+\end{align}
+
+Andersen--Bollerslev--Diebold (2007), Corsi--Renò (2012), Bollerslev--Patton--Quaedvlieg (2016), and Christensen--Siggaard--Veliyev (2023) all routinely report HAR-RV at $h=1, 5, 22$ side-by-side and all call it ``HAR-RV''. The $h \approx 21$ variant is the standard monthly-horizon benchmark. Our adaptation is not exotic --- it's HAR-RV at the horizon matching our target.
+
+\textbf{Practical expectation at $h=21$}: the monthly predictor $RV_m(t)$ will dominate the regression (large $\beta_m$), because a backward 21-day vol window is structurally the closest predictor to a forward 21-day vol target. This is itself an empirical finding worth reporting --- it's essentially why naive \texttt{rolling\_std\_21} (which is exactly the numerator of $RV_m$) is already a competitive baseline.
+
+\subsection*{Role of the LHS: target during training vs forecast during prediction}
+
+Second follow-up: when we write $\texttt{realized\_vol\_21d}(t) = c + \beta_d \cdot RV_d(t) + \ldots + \varepsilon$, is the LHS the \emph{actual} value or the \emph{predicted} value?
+
+Answer: \textbf{both, depending on phase}. This is the standard regression-ML setup but worth spelling out since HAR-RV and our LSTMs share it.
+
+\begin{center}
+\renewcommand{\arraystretch}{1.25}
+\begin{tabular}{@{}p{3.2cm} p{3.8cm} p{6.2cm}@{}}
+\toprule
+Phase & LHS is \ldots & Computed how \\
+\midrule
+Training (fit OLS)        & observed ground truth $y_\tau = \texttt{realized\_vol\_21d}(\tau)$ for historical $\tau \le$ train\_end & from returns $r_{\tau+1}, \ldots, r_{\tau+21}$ that have already been observed (everything in training is past, so both $X$ and $y$ are knowable) \\
+Prediction (at test date $t$) & forecast $\hat y_t$                 & plug $X_t = [RV_d(t), RV_w(t), RV_m(t)]$ into the fitted equation; the true $y_t$ isn't observable until 21 trading days have elapsed \\
+Evaluation (on test rows) & both available                      & compare $\hat y_t$ (forecast) to $y_t$ (realized, now computable in hindsight); MSE / MAE / DM tests run on the resulting $(\hat y_t, y_t)$ pairs \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{Why this is not circular}: temporal separation. $X_t$ uses only returns at times $\le t$ (past); $y_t = \texttt{realized\_vol\_21d}(t)$ uses returns at times $t{+}1, \ldots, t{+}21$ (future). At time $t$, $X_t$ is available but $y_t$ is not. The model's job is to predict $y_t$ from $X_t$. The historical training pairs $(X_\tau, y_\tau)$ exist only because training data is all in the past --- both sides are knowable \emph{to the modeller}, even though $y_\tau$ was not knowable \emph{at time $\tau$}.
+
+\textbf{Same setup as every LSTM in this project.} The LSTMs take $X_t$ (past features) and output $\hat y_t$ (predicted forward vol). HAR-RV is $\hat y_t = \mathrm{OLS}(X_t)$ instead of $\hat y_t = \mathrm{LSTM}(X_t)$ --- same input-output contract, different function class. That's why HAR-RV's metrics are directly comparable to the LSTMs', and why the same Diebold--Mariano machinery applies to pairwise comparisons with A / H / B / O.
+
+\subsection*{Scope notes}
+
+\begin{itemize}[leftmargin=*]
+  \item No hyperparameter tuning. HAR-RV is OLS on three features --- fit in milliseconds on $\sim$3{,}000 train rows.
+  \item No log transform of the target. Our LSTMs train in log-vol space for gradient reasons; OLS has no such need and \texttt{realized\_vol\_21d} is already non-negative and well-scaled.
+  \item No GARCH(1,1) companion. Scoped to HAR-RV only per user decision.
+  \item The \texttt{ignore/GARCH:Review.html} file supplied for the check was a paywalled ScienceDirect abstract only --- no formulas or methodology --- so it cannot verify target alignment independently.
+\end{itemize}
+
+\subsection*{Defensible paper claim}
+
+``We additionally compare against the HAR-RV benchmark of Corsi (2002/2004), adapted to our 21-day forward realized-volatility target: OLS regression of \texttt{realized\_vol\_21d}$(t)$ on three backward-looking volatility components at 1-, 5-, and 21-day horizons. The adaptation preserves Corsi's model structure while keeping the prediction target identical to that of our LSTM baselines, so HAR-RV's MSE / MAE are directly comparable. The 1-day component uses $|r_t|$ (un-demeaned, as in Corsi); the 5- and 21-day components use the demeaned Andersen--Bollerslev form, matching the target's own formula.''
+
+\subsection*{Implementation pointer}
+
+\texttt{src/har\_rv.py} --- now implemented. CLI mirrors \texttt{src/ensemble.py}: writes \texttt{data/processed/\allowbreak test\_predictions\_\allowbreak harrv.parquet} with columns \texttt{[har\_rv, target, rv\_d, rv\_w, rv\_m, naive]} indexed by date.
+
+\subsection*{Results --- live local run (2026-04-24)}
+
+HAR-RV fit in $\sim$100~ms (OLS on 3 features $\times$ 3{,}690 train rows). No Colab training needed for this benchmark --- HAR-RV is an econometric baseline, not a deep model.
+
+\textbf{Learned coefficients} (match the prior: $\beta_m$ dominates at $h = 21$):
+
+\begin{center}
+\renewcommand{\arraystretch}{1.15}
+\begin{tabular}{@{}l r p{7cm}@{}}
+\toprule
+Term & Value & Reading \\
+\midrule
+intercept                            & $+2.72 \times 10^{-3}$ & \\
+$\beta_d$ ($|r_t|$, daily)           & $+0.046$               & tiny --- daily shock carries little 21-day signal \\
+$\beta_w$ (5-day demeaned vol)       & $+0.234$               & moderate \\
+$\beta_m$ (21-day demeaned vol)      & $\mathbf{+0.494}$      & \textbf{dominant} --- best-matched predictor for forward 21-day target \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{Test metrics} ($n = 1{,}461$; HAR-RV's backward 21-day window drops fewer leading test rows than the LSTMs' longer seq\_len):
+
+\begin{center}
+\renewcommand{\arraystretch}{1.15}
+\begin{tabular}{@{}lrrrr@{}}
+\toprule
+Predictor & MSE & RMSE & MAE & MAPE \\
+\midrule
+naive (\texttt{rolling\_std\_21})        & $2.23 \times 10^{-5}$ & $0.00472$ & $0.00318$ & $34.8\%$ \\
+\textbf{HAR-RV}                          & $\mathbf{1.64 \times 10^{-5}}$ & $\mathbf{0.00405}$ & $\mathbf{0.00282}$ & $\mathbf{31.5\%}$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{Diebold--Mariano vs naive} ($h = 21$, Bartlett HAC, HLN-corrected):
+
+\begin{center}
+\renewcommand{\arraystretch}{1.15}
+\begin{tabular}{@{}lrrl@{}}
+\toprule
+Loss & DM & $p$ & Verdict ($\alpha = 0.05$) \\
+\midrule
+MSE          & $+1.76$ & $0.079$ & tie (marginal at $\alpha = 0.10$) \\
+\textbf{MAE} & $\mathbf{+2.69}$ & $\mathbf{0.007}$ & \textbf{HAR-RV wins significantly} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection*{HAR-RV compared to our learned variants (informal)}
+
+Post-sentiment-merge nb 08 numbers used the LSTM common test index ($n = 1{,}434$); HAR-RV used $n = 1{,}461$. Numbers below are \textbf{not strictly row-for-row comparable} --- proper alignment + DM pairwise HAR-RV vs each variant happens in task 6.
+
+\begin{center}
+\renewcommand{\arraystretch}{1.15}
+\begin{tabular}{@{}lrrrr@{}}
+\toprule
+Predictor & MSE & MAE & MAPE & $n$ \\
+\midrule
+naive (A/H/B window)               & $2.22 \times 10^{-5}$ & $0.00313$ & $34.6\%$ & $1{,}434$ \\
+naive (HAR-RV window)              & $2.23 \times 10^{-5}$ & $0.00318$ & $34.8\%$ & $1{,}461$ \\
+\textbf{HAR-RV}                    & $\mathbf{1.64 \times 10^{-5}}$ & $\mathbf{0.00282}$ & $\mathbf{31.5\%}$ & $\mathbf{1{,}461}$ \\
+Variant H baseline (\texttt{p\_volatile}) & $1.58 \times 10^{-5}$ & $0.00252$ & $24.9\%$ & $1{,}434$ \\
+Variant A ensemble                 & $1.42 \times 10^{-5}$ & $0.00252$ & $24.6\%$ & $1{,}434$ \\
+Variant B ensemble (VIX)           & $1.40 \times 10^{-5}$ & $0.00251$ & $26.9\%$ & $1{,}434$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{Interpretation (subject to row-aligned re-check in task 6):}
+
+\begin{itemize}[leftmargin=*]
+  \item HAR-RV \textbf{closes most but not all of the gap} between naive and the deep variants. MSE: naive $2.23 \times 10^{-5}$ $\to$ HAR-RV $1.64 \times 10^{-5}$ $\to$ variant A $1.42 \times 10^{-5}$. HAR-RV captures $\sim$73\% of the naive-to-A MSE improvement using just a 3-feature OLS.
+  \item HAR-RV $\approx$ Variant H on MSE ($1.64 \times 10^{-5}$ vs $1.58 \times 10^{-5}$ --- $\sim$4\% gap). Variant H is a single LSTM with \texttt{p\_volatile} as a feature; HAR-RV matches it using OLS. If the DM row-aligned test returns a tie, that weakens the ``regime signal as a feature adds unique value'' argument for variant H.
+  \item HAR-RV's MAPE ($31.5\%$) is noticeably worse than A/H/B ($\sim 25\%$). MAPE penalises relative errors on small-vol calm days --- HAR-RV's $\beta_m$-dominant prediction overshoots on calm days where 21-day backward vol is high but forward vol is low. The LSTMs handle this asymmetry better.
+  \item \textbf{Variant A's 13-17\% MSE advantage over HAR-RV is real} in point estimate --- the deep regime-split does add something over simple backward-vol weighting. Row-aligned DM tests will confirm whether this margin is statistically significant at $\alpha = 0.05$.
+\end{itemize}
+
+\subsection*{Defensible claims for the paper (pending row-aligned re-check)}
+
+\begin{itemize}[leftmargin=*]
+  \item \emph{``The HAR-RV (Corsi 2002/2004) $h = 21$ benchmark significantly outperforms the naive 21-day persistence baseline (DM MAE $p = 0.007$), confirming that weighted multi-horizon past vol carries real signal beyond pure persistence.''} $\leftarrow$ strongest claim, directly quotable.
+  \item \emph{``The regime-split LSTM ensemble (variant A) beats HAR-RV on all three point metrics, with the largest gap on MAPE (24.6\% vs 31.5\%), suggesting the deep models handle the calm-day small-vol asymmetry better than an OLS on backward RV components.''} $\leftarrow$ directional; conditional on DM confirmation.
+  \item \emph{``HAR-RV is competitive with a single-LSTM regime-feature model (variant H) at $\sim$4\% MSE gap, suggesting the regime signal carries information that multi-horizon backward vol already captures.''} $\leftarrow$ conditional; strong if DM returns a tie.
+\end{itemize}
+
+\vspace{1em}
+\hrule
+\vspace{1em}
+
+\section*{2026-04-24 (afternoon) --- Variant O wiring: code complete, training pending}
+
+\subsection*{Why variant O exists}
+
+Variant O is the \textbf{pre-everything baseline} --- trained without any of the additions we've made since Phase 6. It answers: \emph{``did any of sentiment, VIX, or the HMM-as-feature architecture actually move the needle past where we started?''}
+
+\begin{itemize}[leftmargin=*]
+  \item \textbf{HMM input}: \texttt{HMM\_PRICE\_VOLUME\_FEATURES} (11 feats --- stationary price/volume only, no sentiment).
+  \item \textbf{LSTM input}: \texttt{LSTM\_STATIONARY\_FEATURES} (5 feats --- \texttt{log\_return}, \texttt{abs\_return}, \texttt{oc\_return}, \texttt{intraday\_range}, \texttt{relative\_volume\_21d}. No sentiment. No VIX. No \texttt{p\_volatile} as a feature).
+  \item \textbf{Architecture}: same 3-LSTM regime-split ensemble as variant A, but with regime labels from variant O's own (sentiment-free) HMM. O and A differ \emph{only} in feature sets, not in model structure.
+\end{itemize}
+
+\subsection*{Code changes to enable variant O}
+
+All backward-compatible --- existing A / H / B invocations keep working unchanged. Variant O activates via new CLI args.
+
+\begin{enumerate}[leftmargin=*]
+  \item \textbf{\texttt{src/train\_hmm.py}} (new module). Programmatic counterpart to \texttt{notebooks/03\_hmm\_regime.ipynb}. Parameterised on \texttt{-{}-features-group \{HMM\_PRICE\_VOLUME\_FEATURES $|$ HMM\_FEATURES\}} and \texttt{-{}-output-suffix}. Saves \texttt{hmm\_winner\{suffix\}.joblib}, \texttt{hmm\_scaler\{suffix\}.joblib}, \texttt{hmm\_meta\{suffix\}.joblib}, and \texttt{regime\_probabilities\{suffix\}.parquet}. Delegates to functions already in \texttt{src/hmm\_model.py} --- no duplication.
+  \item \textbf{\texttt{src/train\_LSTM\_regime.py}}: added \texttt{-{}-regime-probs-path} and \texttt{-{}-hmm-meta-path} CLI args. Default \texttt{None} resolves to the current hardcoded paths (unchanged for A / B). Variant O passes \texttt{-{}-regime-probs-path data/processed/\allowbreak regime\_probabilities\_O.parquet} and \texttt{-{}-hmm-meta-path models/hmm\_meta\_O.joblib}. Also removed a dead \texttt{load\_viterbi()} call whose output was immediately overwritten.
+  \item \textbf{\texttt{src/ensemble.py}}: same two CLI args, same default-preservation. Variant O's invocation: \texttt{python -m src.ensemble -{}-variant-suffix \_O -{}-regime-probs-path \ldots\ -{}-hmm-meta-path \ldots}.
+\end{enumerate}
+
+\subsection*{Notebook integration}
+
+\texttt{notebooks/07\_variant\_comparison.ipynb} now has six new cells (9--14) placed after variant-B training and before ``Produce test-set predictions''. They orchestrate the variant-O pipeline end-to-end in four stages: (1) retrain HMM, (2) train baseline LSTM, (3) train regime LSTMs with variant-O regime labels, (4) run ensemble with variant-O soft probabilities.
+
+Exact CLI invocations (see nb 08 cells 11--14 for the shell-magic variants):
+\begin{small}
+\begin{verbatim}
+python -m src.train_hmm \
+    --features-group HMM_PRICE_VOLUME_FEATURES \
+    --output-suffix _O
+
+python -m src.train_LSTM_baseline \
+    --features <LSTM_STATIONARY_FEATURES> \
+    --output-prefix lstm_baseline_O
+
+python -m src.train_LSTM_regime \
+    --features <LSTM_STATIONARY_FEATURES> \
+    --regime both \
+    --output-suffix _O \
+    --regime-probs-path data/processed/regime_probabilities_O.parquet \
+    --hmm-meta-path     models/hmm_meta_O.joblib
+
+python -m src.ensemble \
+    --variant-suffix _O \
+    --regime-probs-path data/processed/regime_probabilities_O.parquet \
+    --hmm-meta-path     models/hmm_meta_O.joblib
+\end{verbatim}
+\end{small}
+
+\subsection*{Artifacts variant O will produce on first run}
+
+\begin{itemize}[leftmargin=*]
+  \item \texttt{models/hmm\_winner\_O.joblib}, \allowbreak \texttt{models/hmm\_scaler\_O.joblib}, \allowbreak \texttt{models/hmm\_meta\_O.joblib}
+  \item \texttt{data/processed/regime\_probabilities\_O.parquet}
+  \item \texttt{models/lstm\_baseline\_O.pt} (+ scaler), \allowbreak \texttt{models/lstm\_calm\_O.pt} (+ scaler), \allowbreak \texttt{models/lstm\_volatile\_O.pt} (+ scaler)
+  \item \texttt{data/processed/test\_predictions\_O.parquet} \\ (columns: \texttt{baseline}, \texttt{calm}, \texttt{volatile}, \texttt{target}, \texttt{p\_calm}, \texttt{p\_volatile}, \texttt{ensemble})
+\end{itemize}
+
+\subsection*{Status}
+
+\textbf{Code complete, not yet trained.} Training will run on Colab once the remaining comparison / benchmark pieces (HAR-RV module + 5-way nb-08 table cells) are in place. No training artifacts exist locally yet --- running nb 08 cells 11--14 will produce them.
+
+\subsection*{Expected role in the 5-way comparison table}
+
+Variant O is the \textbf{floor} row in the final comparison table $\{\text{naive}, A, H, B, O, \text{HAR-RV}\}$. Key framing questions:
+
+\begin{itemize}[leftmargin=*]
+  \item Does variant-A \textbf{ensemble with sentiment} beat variant O without sentiment? $\to$ quantifies incremental value of AAII bullish/bearish columns.
+  \item Does variant H (HMM-as-feature) beat variant O? $\to$ tests whether exposing the regime signal to the LSTM via any route helps over no-regime-signal at all.
+  \item Does variant B (VIX family) beat variant O? $\to$ isolates the value of forward-looking implied-vol features over price-only.
+\end{itemize}
+
+If variant O ties with A / H / B on DM tests, that's additional evidence for the structural-limits framing: \textbf{none of the post-phase-6 feature expansions mattered at this horizon}, consistent with F1 being a data-rate $\times$ horizon property rather than a feature-set problem. If variant O loses significantly, that's evidence the feature additions do carry real signal and we should reframe accordingly.
+
+\vspace{1em}
+\hrule
+\vspace{1em}
+
+\section*{2026-04-24 (evening) --- Variant-symmetric pipeline refactor}
+
+\subsection*{Why this refactor}
+
+Earlier pipeline had an asymmetry: nb04/nb05 trained \emph{one} ``main'' model (variant A, since \texttt{LSTM\_BASELINE\_FEATURES} defaulted to stationary + sentiment), and other variants (H, B, and the proposed O) were tacked on as ad-hoc additions in nb08. That mixed ``research question'' (\emph{does regime-splitting help?}) with ``feature-set choice'' --- confusing both for the reader and for interpretation.
+
+The reframed research question: \textbf{``does per-regime LSTM training help over a base LSTM at predicting 21-day-forward volatility?''} --- answered \textbf{three times} on three independent pipelines (variants O / A / B), plus a separate architectural ablation (variant H).
+
+\subsection*{Variant definitions (final, post-refactor)}
+
+All feature lists live in \texttt{config.py}. Each variant has a matching \texttt{HMM\_VARIANT\_*\_FEATURES} (for the regime detector) and \texttt{LSTM\_VARIANT\_*\_FEATURES} (for the LSTMs).
+
+\begin{center}
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{@{}l p{3.2cm} p{3.2cm} p{4.4cm}@{}}
+\toprule
+Variant & HMM features & LSTM features & Research role \\
+\midrule
+\textbf{O} & price/vol + rolling (11) & stationary only (5) & pre-everything lower bound \\
+\textbf{A} & O + sentiment (13) & O + sentiment (7) & ``main'' model (post-sentiment default) \\
+\textbf{H} & \emph{(shares A's HMM)} & A's LSTM features + \texttt{p\_volatile} (8) & regime-as-feature architectural variant \\
+\textbf{B} & A + VIX family (16) & A + VIX family (10) & forward-looking IV addition \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Backward-compat aliases preserved: \texttt{HMM\_FEATURES = HMM\_VARIANT\_A\_FEATURES}; \texttt{LSTM\_BASELINE\_FEATURES = LSTM\_VARIANT\_A\_FEATURES}; \texttt{HMM\_PRICE\_VOLUME\_FEATURES = HMM\_VARIANT\_O\_FEATURES}; \texttt{LSTM\_STATIONARY\_FEATURES = LSTM\_VARIANT\_O\_FEATURES}.
+
+\subsection*{New notebook pipeline}
+
+\begin{center}
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{@{}l p{9.5cm}@{}}
+\toprule
+Notebook & Role (post-refactor) \\
+\midrule
+\texttt{01\_data\_collection.ipynb} & Feature engineering; new \S 7b per-variant correlation + VIF diagnostics \\
+\texttt{02\_eda\_normality.ipynb}   & Normality tests extended to variant-B superset (16 features) \\
+\texttt{03\_hmm\_regime.ipynb}      & Primary variant-A HMM; \S 10b trains variants O and B via \texttt{train\_hmm.py}; \S 10c injects \texttt{p\_volatile} into split parquets \\
+\texttt{04\_lstm\_baseline.ipynb}   & Loops over 4 baseline LSTMs (O, A, H, B) with explicit \texttt{-{}-features} + \texttt{-{}-output-prefix} \\
+\texttt{05\_lstm\_regime.ipynb}     & Loops over 3 regime pairs (O, A, B); variant-specific \texttt{-{}-regime-probs-path} + \texttt{-{}-hmm-meta-path} \\
+\texttt{06\_ensemble\_eval.ipynb}   & Per-variant ensemble + \textbf{within-variant DM} (baseline vs ensemble) --- the paper's core research answer \\
+\texttt{07\_variant\_comparison.ipynb} & \emph{(was \texttt{08\_seven\_model\_comparison.ipynb})} --- cross-variant 6-way comparison; 15 pairwise DM tests with Bonferroni + BH-FDR correction; F1 lag diagnostic; F2 prediction-std \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection*{Archived notebooks}
+
+Moved to \texttt{notebooks/archive/}:
+
+\begin{itemize}[leftmargin=*]
+  \item \texttt{07\_sentiment\_ablation.ipynb} --- superseded: the 5-feat vs 7-feat ablation is now the variant O vs A comparison in the new pipeline. Within-variant DM + cross-variant DM answer the same question more rigorously.
+  \item \texttt{07\_variant\_b\_experiment.ipynb} --- already carried a deprecation notice. Pre-merge variant A was 5-feat, not the post-merge 7-feat, so its ``A vs B'' is not directly comparable to the current variant-symmetric pipeline.
+\end{itemize}
+
+\subsection*{Code changes to \texttt{src/}}
+
+All backward-compatible --- no existing invocations break:
+
+\begin{itemize}[leftmargin=*]
+  \item \texttt{src/train\_hmm.py} (new CLI module). \texttt{-{}-features-group} accepts all three variant groups plus aliases; \texttt{-{}-output-suffix} for variant-suffixed artifacts.
+  \item \texttt{src/train\_LSTM\_regime.py} --- added \texttt{-{}-regime-probs-path} and \texttt{-{}-hmm-meta-path} so each variant's regime LSTMs use its own HMM's Viterbi labels.
+  \item \texttt{src/ensemble.py} --- same two CLI args for variant-specific soft-probability weighting.
+  \item \texttt{config.py} --- variant-indexed feature groups; all pre-existing aliases retained.
+\end{itemize}
+
+\texttt{hmm\_model.py}, \texttt{data\_loader.py}, \texttt{lstm\_model.py}, \texttt{har\_rv.py}, \texttt{utils.py}, \texttt{train\_LSTM\_baseline.py} were not modified (already variant-agnostic by design).
+
+\subsection*{Significance testing upgrade}
+
+\texttt{07\_variant\_comparison.ipynb} now reports three p-value columns for each of its 30 pairwise DM tests:
+
+\begin{itemize}[leftmargin=*]
+  \item \textbf{Raw p-value} --- Diebold-Mariano (Bartlett HAC lag $h-1$, HLN correction) at $h = 21$.
+  \item \textbf{Bonferroni-adjusted} --- conservative FWER at $\alpha=0.05$ requires raw $p < 0.00167$ to reject.
+  \item \textbf{Benjamini-Hochberg FDR-adjusted} --- modern, less conservative standard. Controls expected proportion of false rejections at $\alpha=0.05$.
+\end{itemize}
+
+Paper claims should cite BH-FDR as the primary threshold; Bonferroni as supplementary for reviewers who expect strict FWER control.
+
+\subsection*{Expected outcome (post-Colab)}
+
+The research question gets \textbf{three concrete DM verdicts} in nb 06 (one per variant O / A / B), plus \textbf{15 pairwise verdicts} in nb 07 across the 6-way comparison. If the within-variant DM tests consistently return ``tie'' (baseline $\approx$ ensemble), the paper's structural-limits headline is supported three times over. If one or more reject, we quantify the effect and flag which feature-richness regime it appears in.
+
+\emph{Note:} references to ``nb 08'' in earlier dated entries refer to what is now \texttt{07\_variant\_comparison.ipynb} after the Phase-10 rename. Historical entries are preserved as a record of the refactor trajectory.
+
 \end{document}

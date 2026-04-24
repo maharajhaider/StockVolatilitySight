@@ -64,7 +64,10 @@ VIX_FAMILY_FEATURES = [
     "vix3m_minus_vix",
 ]
 
+# ── HMM feature building blocks ──────────────────────────────────────────────
 # Price / volume HMM inputs (notebook 01 correlation prune; VIF informational only).
+# HMM needs explicit rolling stats because each emission is independent given the
+# state — unlike the LSTM, the HMM has no internal sliding-window memory.
 HMM_PRICE_VOLUME_FEATURES = [
     "log_return",
     "abs_return",
@@ -79,12 +82,21 @@ HMM_PRICE_VOLUME_FEATURES = [
     "rolling_std_21",
 ]
 
-# HMM input = stationary market features + bullish/bearish sentiment levels.
+# ── HMM feature sets, indexed by variant ─────────────────────────────────────
+# Each variant's HMM sees the corresponding feature additions. Variant H is
+# architecturally identical to A (same HMM) — it only differs at the LSTM layer
+# by consuming p_volatile as an input feature, so there is no HMM_VARIANT_H.
+#
 # neutral is excluded (= 1 - bullish - bearish, perfectly collinear → singular cov).
 # bull_bear_spread is excluded (= bullish - bearish, linear combination of the two).
 # Keeping only bullish + bearish breaks the linear dependency while still giving
 # the HMM the sentiment signal without a rank-deficient covariance matrix.
-HMM_FEATURES = HMM_PRICE_VOLUME_FEATURES + ["bullish", "bearish"]
+HMM_VARIANT_O_FEATURES = list(HMM_PRICE_VOLUME_FEATURES)                         # 11 feats
+HMM_VARIANT_A_FEATURES = HMM_VARIANT_O_FEATURES + SENTIMENT_FEATURES             # 13 feats
+HMM_VARIANT_B_FEATURES = HMM_VARIANT_A_FEATURES + VIX_FAMILY_FEATURES            # 16 feats
+
+# Backward-compatible alias: `HMM_FEATURES` pre-refactor was the A-variant set.
+HMM_FEATURES = HMM_VARIANT_A_FEATURES
 
 # ── HMM ───────────────────────────────────────────────────────────────────────
 HMM_N_STATES = 2
@@ -119,25 +131,27 @@ LSTM_STATIONARY_FEATURES = [
     "relative_volume_21d",
 ]
 
-# Default baseline LSTM = stationary + AAII sentiment (requires aaii_sentiment.csv/.xls in data/raw/).
-LSTM_BASELINE_FEATURES = LSTM_STATIONARY_FEATURES + SENTIMENT_FEATURES
-
-# ── Variant feature sets for the seven-model comparison experiment ────────────
-# Variant A = current baseline (LSTM_BASELINE_FEATURES above — stationary + sentiment).
-# Variant B = A augmented with VIX-family forward-looking features.
-# Variant H = A augmented with the HMM posterior p_volatile as an additional
-#             input feature. Tests whether the regime signal can be exploited
-#             through a feature in a single LSTM instead of via the regime-split
-#             ensemble architecture. Only p_volatile is added (p_calm is the
-#             collinear complement; Ridge stacking in src/gate_stacking.py
-#             already demonstrated both add the same information).
+# ── LSTM feature sets, indexed by variant ────────────────────────────────────
+# The paper's research question is: "does per-regime LSTM training help over a
+# base LSTM at predicting volatility?" — answered independently for three
+# feature-richness pipelines (variants O / A / B), each with its own HMM
+# (HMM_VARIANT_O/A/B_FEATURES above).
 #
-# HMM features are NOT augmented with VIX — regime labels remain derived from
-# price/volume + sentiment only so that variant A and variant B share the same
-# HMM regime sequence. This isolates the LSTM's response to the new features.
-LSTM_VARIANT_A_FEATURES = list(LSTM_BASELINE_FEATURES)
-LSTM_VARIANT_B_FEATURES = LSTM_VARIANT_A_FEATURES + VIX_FAMILY_FEATURES
-LSTM_VARIANT_H_FEATURES = LSTM_VARIANT_A_FEATURES + ["p_volatile"]
+# Variant O — pre-everything: stationary returns / volume only.
+# Variant A — variant O + AAII sentiment (bullish, bearish).
+# Variant B — variant A + VIX family (vix, vix_log_change, vix3m_minus_vix).
+#
+# Variant H is architecturally different from the regime-split ensembles — it
+# uses variant A's features plus the HMM's p_volatile posterior as an extra
+# LSTM input. Tests "regime-as-feature" vs "regime-as-gate" (variant A's
+# ensemble). Shares variant A's HMM; has no ensemble of its own.
+LSTM_VARIANT_O_FEATURES = list(LSTM_STATIONARY_FEATURES)                          # 5 feats
+LSTM_VARIANT_A_FEATURES = LSTM_VARIANT_O_FEATURES + SENTIMENT_FEATURES            # 7 feats
+LSTM_VARIANT_H_FEATURES = LSTM_VARIANT_A_FEATURES + ["p_volatile"]                # 8 feats
+LSTM_VARIANT_B_FEATURES = LSTM_VARIANT_A_FEATURES + VIX_FAMILY_FEATURES           # 10 feats
+
+# Backward-compatible alias: `LSTM_BASELINE_FEATURES` pre-refactor = A-variant set.
+LSTM_BASELINE_FEATURES = LSTM_VARIANT_A_FEATURES
 
 # Target column produced by features.build_features().
 LSTM_TARGET = f"realized_vol_{VOL_WINDOW}d"

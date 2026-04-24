@@ -157,16 +157,27 @@ class RegimeWindowDataset(Dataset):
 
 # ── Regime label helpers ──────────────────────────────────────────────────────
 
-def load_viterbi(split_df: pd.DataFrame) -> np.ndarray:
+def load_viterbi(
+    split_df: pd.DataFrame,
+    regime_probs_path: Path | None = None,
+    hmm_meta_path: Path | None = None,
+) -> np.ndarray:
     """
     Load Viterbi regime labels for *split_df* by joining on date index.
 
     Returns integer array (0=calm, 1=volatile) aligned to split_df rows
     (NaN rows filled with calm=0 as fallback).
+
+    Optional *regime_probs_path* / *hmm_meta_path* point to variant-specific
+    artifacts (e.g. variant O's ``regime_probabilities_O.parquet`` /
+    ``hmm_meta_O.joblib``). Defaults match variants A / B / H.
     """
-    rp = pd.read_parquet(config.DATA_PROCESSED / "regime_probabilities.parquet")
+    rp_path = regime_probs_path or (config.DATA_PROCESSED / "regime_probabilities.parquet")
+    meta_path = hmm_meta_path or (config.MODELS_DIR / "hmm_meta.joblib")
+
+    rp = pd.read_parquet(rp_path)
     # Map text label → int using the HMM meta so we are consistent.
-    meta = joblib.load(config.MODELS_DIR / "hmm_meta.joblib")
+    meta = joblib.load(meta_path)
     calm_state: int = meta["calm_state"]
     volatile_state: int = meta["volatile_state"]
 
@@ -317,7 +328,7 @@ def train_one_regime(
     device: torch.device,
 ) -> dict:
     """End-to-end training for a single regime (calm or volatile)."""
-    meta = joblib.load(config.MODELS_DIR / "hmm_meta.joblib")
+    meta = joblib.load(args.hmm_meta_path)
     target_state: int = meta[f"{regime}_state"]
     logger.info("=== Training regime LSTM: %s (state=%d) ===", regime, target_state)
 
@@ -339,15 +350,12 @@ def train_one_regime(
     n_features = X_train.shape[1]
 
     # ── 4. Viterbi labels aligned to each split ──────────────────────────────
-    viterbi_train = load_viterbi(train_df.loc[train_df[args.target].notna()])
-    viterbi_val   = load_viterbi(val_df.loc[val_df[args.target].notna()])
-
     # Trim arrays to match NaN-dropped prepare_arrays output length
     # prepare_arrays drops NaN rows; we must align viterbi to the same rows.
     train_nonan_idx = train_df[args.features + [args.target]].dropna().index
     val_nonan_idx   = val_df[args.features + [args.target]].dropna().index
 
-    rp = pd.read_parquet(config.DATA_PROCESSED / "regime_probabilities.parquet")
+    rp = pd.read_parquet(args.regime_probs_path)
     viterbi_train = rp["viterbi_state"].reindex(train_nonan_idx).fillna(meta["calm_state"]).astype(int).values
     viterbi_val   = rp["viterbi_state"].reindex(val_nonan_idx).fillna(meta["calm_state"]).astype(int).values
 
@@ -489,11 +497,38 @@ def parse_args() -> argparse.Namespace:
             "models/lstm_calm_B.pt. Default empty preserves the original naming."
         ),
     )
+    p.add_argument(
+        "--regime-probs-path", default=None,
+        help=(
+            "Path to regime probabilities parquet (for variant-specific HMMs). "
+            "Default None → data/processed/regime_probabilities.parquet. "
+            "For variant O: data/processed/regime_probabilities_O.parquet."
+        ),
+    )
+    p.add_argument(
+        "--hmm-meta-path", default=None,
+        help=(
+            "Path to HMM meta joblib (state→calm/volatile mapping). "
+            "Default None → models/hmm_meta.joblib. "
+            "For variant O: models/hmm_meta_O.joblib."
+        ),
+    )
     return p.parse_args()
 
 
 def main() -> dict:
     args = parse_args()
+
+    # Resolve variant-probe-path defaults now so downstream code can just read
+    # args.regime_probs_path / args.hmm_meta_path without knowing about defaults.
+    args.regime_probs_path = (
+        Path(args.regime_probs_path) if args.regime_probs_path
+        else config.DATA_PROCESSED / "regime_probabilities.parquet"
+    )
+    args.hmm_meta_path = (
+        Path(args.hmm_meta_path) if args.hmm_meta_path
+        else config.MODELS_DIR / "hmm_meta.joblib"
+    )
 
     logging.basicConfig(
         level=logging.INFO,
@@ -501,6 +536,11 @@ def main() -> dict:
         datefmt="%H:%M:%S",
     )
     optuna.logging.set_verbosity(optuna.logging.WARNING)
+
+    logger.info(
+        "Regime-LSTM training — output_suffix=%s, regime_probs=%s, hmm_meta=%s",
+        args.output_suffix or "<none>", args.regime_probs_path, args.hmm_meta_path,
+    )
 
     device = torch.device("cpu")
     set_seed(args.seed)

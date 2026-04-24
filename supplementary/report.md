@@ -27,7 +27,7 @@ Negative lag = the prediction is *shifted later than* the target = the model is 
 
 **Why this is structural, not architectural.** Future returns are not predictable from past returns (anything close to Efficient Markets Hypothesis). Future-magnitude (vol) is modestly predictable from past-magnitude, but only via persistence. No LSTM architecture on price/volume inputs can escape this — the shift is a *data* property, not a model property.
 
-**Tested directly via three post-sentiment-merge variants (see §4.5 and `notebooks/08_seven_model_comparison.ipynb`):**
+**Tested directly via three post-sentiment-merge variants (see §4.5 and `notebooks/07_variant_comparison.ipynb`):**
 
 - **Variant A** — stationary + sentiment (7 feats), regime-split ensemble
 - **Variant H** — variant A + `p_volatile` as an LSTM input feature (8 feats), single baseline LSTM (no ensemble gating)
@@ -274,7 +274,7 @@ Three axes along which the problem could be made tractable (none of which we cou
 
 ### 4.5 Post-sentiment-merge three-way comparison (variants A, H, B)
 
-*Full writeup in `notebooks/08_seven_model_comparison.ipynb` and the `supplementary/discussion.md` entry dated 2026-04-23 (late-late evening). Supersedes the pre-merge variant-B single-seed experiment in `notebooks/07_variant_b_experiment.ipynb`.*
+*Full writeup in `notebooks/07_variant_comparison.ipynb` and the `supplementary/discussion.md` entry dated 2026-04-23 (late-late evening). Supersedes the pre-merge variant-B single-seed experiment in `notebooks/archive/07_variant_b_experiment.ipynb`.*
 
 **Seven LSTMs trained; five evaluable test-set predictors.** From the seven trained models:
 
@@ -283,10 +283,10 @@ Three axes along which the problem could be made tractable (none of which we cou
 | 1 | nb 04 | `lstm_baseline.pt` | 7 (stationary + sentiment) | A baseline (single-LSTM) |
 | 2 | nb 05 | `lstm_calm.pt` | 7 | (component of A ensemble) |
 | 3 | nb 05 | `lstm_volatile.pt` | 7 | (component of A ensemble) |
-| 4 | nb 08 | `lstm_baseline_H.pt` | 8 (+ `p_volatile`) | H baseline (single-LSTM) |
-| 5 | nb 08 | `lstm_baseline_B.pt` | 10 (+ VIX family) | B baseline (single-LSTM) |
-| 6 | nb 08 | `lstm_calm_B.pt` | 10 | (component of B ensemble) |
-| 7 | nb 08 | `lstm_volatile_B.pt` | 10 | (component of B ensemble) |
+| 4 | nb 07 | `lstm_baseline_H.pt` | 8 (+ `p_volatile`) | H baseline (single-LSTM) |
+| 5 | nb 07 | `lstm_baseline_B.pt` | 10 (+ VIX family) | B baseline (single-LSTM) |
+| 6 | nb 07 | `lstm_calm_B.pt` | 10 | (component of B ensemble) |
+| 7 | nb 07 | `lstm_volatile_B.pt` | 10 | (component of B ensemble) |
 
 The 5 evaluable predictors (beyond the naive `rolling_std_21` reference) are **3 baselines** (A, H, B single-LSTM outputs) and **2 soft-probability ensembles** (A, B). Variant H has no ensemble because it *is* a single LSTM that consumes `p_volatile` as a feature — testing whether the regime signal needs the ensemble architecture at all.
 
