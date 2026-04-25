@@ -12,10 +12,16 @@ build/
 models/*.joblib
 models/*.pt
 models/*.pth
-# Whitelist variant Os HMM artifacts — needed by the Colab refit notebook
+# Whitelist GaussianHMM-variant artifacts — needed by Colab refit notebooks
 !models/hmm_winner_Os.joblib
 !models/hmm_meta_Os.joblib
 !models/hmm_scaler_Os.joblib
+!models/hmm_winner_As.joblib
+!models/hmm_meta_As.joblib
+!models/hmm_scaler_As.joblib
+!models/hmm_winner_Bs.joblib
+!models/hmm_meta_Bs.joblib
+!models/hmm_scaler_Bs.joblib
 
 # Personal report (kept off git per author request)
 paper/main.*

@@ -1,0 +1,31 @@
+{
+  "best_params": {
+    "hidden_size": 128,
+    "n_layers": 3,
+    "dropout": 0.3883512544126061,
+    "lr": 0.003939313238054466,
+    "batch_size": 64,
+    "seq_len": 42
+  },
+  "best_val_mse_raw": 4.022329085273668e-05,
+  "retrained_val_mse_raw": 4.022329085273668e-05,
+  "test_metrics": {
+    "MSE": 1.3356764611671679e-05,
+    "RMSE": 0.0036546906922012568,
+    "MAE": 0.0024708930868655443,
+    "n_test_windows": 1440
+  },
+  "features": [
+    "log_return",
+    "abs_return",
+    "oc_return",
+    "intraday_range",
+    "relative_volume_21d",
+    "bullish",
+    "bearish"
+  ],
+  "target": "realized_vol_21d",
+  "n_trials": 20,
+  "seed": 42,
+  "fixed_hparams_source": null
+}
