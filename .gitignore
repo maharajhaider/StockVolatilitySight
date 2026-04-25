@@ -12,6 +12,14 @@ build/
 models/*.joblib
 models/*.pt
 models/*.pth
+# Whitelist variant Os HMM artifacts — needed by the Colab refit notebook
+!models/hmm_winner_Os.joblib
+!models/hmm_meta_Os.joblib
+!models/hmm_scaler_Os.joblib
+
+# Personal report (kept off git per author request)
+paper/main.*
+texput.log
 
 # Jupyter
 .ipynb_checkpoints/
