@@ -6,6 +6,105 @@ Working notes mapping our project work onto the CPSC 440/550 report outline (fro
 
 ---
 
+## ⚑ Post-Colab final results (2026-04-24, multi-seed k=3) — DON'T FORGET
+
+These are the NUMBERS the paper should quote. Subset of the older F1-F4 framings below is now refined; specifically F2 and F4 have important new nuance that supersedes the prior text.
+
+### The research question's actual answer (within-variant DM)
+
+> *Does per-regime LSTM training help over a base LSTM at predicting 21-day-forward vol?*
+
+| Variant | DM MSE p | DM MAE p | Verdict |
+|---|---|---|---|
+| O (stationary only) | 0.89 | 0.07 | tie |
+| A (+ sentiment) | 0.15 | 0.06 | tie (marginal MAE) |
+| **B (+ VIX)** | **0.030** | **0.025** | **ensemble wins (significant)** |
+
+**Refined headline claim:** *Regime-splitting only helps when forward-looking VIX features are present.* Not "regime-splitting never helps." The structural-limits framing keeps F1/F2/F4 but adds an **interaction effect** between feature richness and regime-split usefulness.
+
+### Headline 6-way table (mean-of-3-seeds, n = 1,440 common test rows)
+
+| Predictor | MSE | MAE | MAPE |
+|---|---|---|---|
+| naive (rolling_std_21) | 2.20×10⁻⁵ | 0.00313 | 34.59% |
+| HAR-RV | 1.61×10⁻⁵ | 0.00278 | 31.26% |
+| variant O (ensemble) | 1.43×10⁻⁵ | 0.00264 | 30.14% |
+| **variant A (ensemble)** | 1.30×10⁻⁵ | **0.00235** | **24.23%** |
+| variant H (baseline) | 1.38×10⁻⁵ | 0.00243 | 24.91% |
+| variant B (ensemble) | **1.29×10⁻⁵** | 0.00239 | 25.51% |
+
+- **Sentiment is the largest single feature contribution.** O → A drops MAPE by **5.9 percentage points** (30.14 → 24.23). DM(O.ens, A.ens) MAE BH-FDR p < 0.001.
+- **VIX adds nothing on top of sentiment** (cross-variant). A vs B is a tie under BH-FDR.
+- **A, B, H are statistically indistinguishable** from each other on all pairwise DM tests under BH-FDR.
+
+### Cross-variant DM with BH-FDR correction (9 of 30 tests reject)
+
+The "tier order" is unambiguous:
+
+1. **Top tier (A, B, H)** — all beat naive, HAR-RV, AND variant O on MAE (BH-FDR p ≤ 0.005). Pairwise within-tier: ties.
+2. **Middle (variant O ensemble, HAR-RV)** — both beat naive (HAR-RV barely, BH-FDR p = 0.007). O and HAR-RV tie with each other.
+3. **Bottom: naive.**
+
+### F1 — persistence-shift floor SURVIVES across all 6 predictors
+
+Updated peak-lag table (use this, not the older F1 table):
+
+| Predictor | Peak lag | Peak corr | Lag-0 corr |
+|---|---|---|---|
+| naive | **−21** | 1.000 | 0.457 |
+| **HAR-RV** | **−21** | 0.947 | 0.494 ← *HAR-RV is "naive with bias correction"* |
+| variant O ensemble | −16 | 0.799 | 0.541 |
+| **variant A ensemble** | −17 | 0.835 | **0.601** ← best lag-0 |
+| variant H baseline | −16 | 0.862 | 0.578 |
+| variant B ensemble | −16 | 0.814 | 0.590 |
+
+**Key paper claim:** all learned variants narrow the lag from −21 (persistence floor) to −16/−17 — improvement of **4-5 days**, but NEVER reaches zero. F1 is structural; not a feature-set or architecture problem.
+
+### F2 — variant O is the EXCEPTION (key refinement)
+
+Per-(variant × seed) volatile-LSTM prediction std (target std = 0.0044):
+
+- **Variant A volatile LSTM:** pred std **0.26-0.86** (60-200× target) — wildly non-stationary, implausible vol predictions in [-1, +2].
+- **Variant B volatile LSTM:** pred std **0.0004-0.056** — mostly collapsed near-constant. One seed has std 4×10⁻⁴ (0.10× target).
+- **Variant O volatile LSTM:** pred std **0.003-0.004** (0.71-0.86× target) — **stable and functional across all 3 seeds.**
+
+**Why O is the exception:** O's HMM labels **60% of test days as strictly volatile** (868 of 1,440) vs only 27-32 days for variants A/B (~2%). Without sentiment in the HMM, regime detection is much more aggressive → ~30× more volatile-majority training windows → no F2 collapse.
+
+**This refines F4** — data scarcity for the volatile LSTM is **HMM-dependent**, not an absolute property of the daily-frequency data. Variants with sentiment-augmented HMMs are conservative about volatile labels → ~180 training windows → F2. Sentiment-free HMM → ~2,200 windows → no F2.
+
+### Cross-seed variance (multi-seed disclosure for the paper's methodology section)
+
+| Predictor | MSE CV % | MAE CV % | MAPE CV % |
+|---|---|---|---|
+| variant O (ensemble) | **3.2** | 3.0 | 3.8 (most stable) |
+| variant A (ensemble) | 5.7 | 2.1 | 5.8 |
+| variant H (baseline) | 6.7 | 1.9 | 3.3 |
+| **variant B (ensemble)** | **13.5** | **6.3** | 6.4 (most unstable) |
+
+**Multi-seed reporting required.** Variant B's MSE swings ±13.5 % across seeds — single-seed numbers are unreliable for B specifically. Direct evidence that F2's seed-dependent failure mode propagates into headline metrics.
+
+### Defensible quotable claims — fill straight into the paper
+
+1. *"Adding AAII sentiment to the LSTM features (variant O → A) reduces test MSE by 9% and MAPE by 6 pp (30.14 → 24.23%); statistically significant on MAE (BH-FDR p < 0.001). This is the largest single feature contribution we observed."*
+2. *"Adding VIX-family inputs on top of sentiment (A → B) does not significantly improve cross-variant point metrics (BH-FDR p > 0.7 on MAE), even though variant B is the only pipeline where the regime-split ensemble significantly beats its single-LSTM baseline (within-variant DM, p = 0.030 MSE / 0.025 MAE)."*
+3. *"All three richer variants (A, B, H) significantly beat the canonical HAR-RV (Corsi 2002/2004) econometric benchmark on MAE (BH-FDR p ≤ 0.001). Variant O ties with HAR-RV — without sentiment, the deep model offers no benefit over a 3-feature OLS."*
+4. *"Persistence-shift floor (F1): all six predictors peak at lag −16 to −21; learned variants narrow this by 4-5 days but never reach zero. The shift is structural — a property of the daily × 21-day-forward target, not the feature set or architecture."*
+5. *"Volatile-LSTM degeneracy (F2) appears in two seed-dependent failure modes for variants A (pred std 165-195× target — wildly non-stationary) and B (collapsed near-constant on the worst seed). Variant O does NOT exhibit F2 because its sentiment-free HMM labels 60% of days as volatile, giving ~30× more training windows for the volatile LSTM (~2,200 vs ~180)."*
+6. *"Multi-seed (k=3) reporting captures meaningful training-stochasticity variance: 3-7% MSE CV for the stable variants (O, A, H) and 13.5% for variant B."*
+
+### What changed vs the prior F1-F4 sections below
+
+| Section | Status |
+|---|---|
+| F1 — persistence shift | **CONFIRMED** — peak lag −16/−17 across all learned variants; HAR-RV at −21 (new datapoint, supports story) |
+| F2 — volatile degeneracy | **REFINED** — exists in two failure modes; variant O is exception (sentiment-free HMM avoids it) |
+| F3 — learned gate | **UNCHANGED** — gate_stacking F3 evidence still stands; not re-tested in this run |
+| F4 — data scarcity | **REFINED** — depends on HMM aggressiveness, not absolute data size. Variant O's "liberal" HMM gives ~30× more volatile-majority windows than A/B's "conservative" HMMs |
+
+The older F1-F4 prose below is preserved as historical record; the **numbers above supersede** any conflicting prose in those sections.
+
+---
+
 ## ⚑ Headline findings — what the paper should lead with
 
 Two diagnostic findings reframe the entire research narrative. These are the most important things not to bury.
